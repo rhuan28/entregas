@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Entregas - Confeitaria</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <div class="navbar-header">
+                <h1 class="navbar-title">🎂 Confeitaria Entregas</h1>
+            </div>
+        </div>
+    </nav>
+
+    <div class="home-container">
+        <div class="text-center mb-3">
+            <h1>Sistema de Entregas</h1>
+            <p class="text-muted">Gerencie suas rotas de entrega de forma eficiente</p>
+        </div>
+        
+        <div class="new-route-section">
+            <h2>Criar Nova Rota</h2>
+            <input type="date" id="new-route-date" class="date-picker">
+            <button onclick="createNewRoute()" class="new-route-btn">
+                ➕ Criar Rota
+            </button>
+        </div>
+        
+        <div class="existing-routes">
+            <h2>Rotas Existentes</h2>
+            <div id="routes-list">
+                <p class="text-center text-muted">Carregando...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        // Define data atual no campo
+        document.getElementById('new-route-date').value = new Date().toISOString().split('T')[0];
+        
+        async function loadRoutes() {
+            try {
+                const response = await fetch(`${API_URL}/deliveries/routes`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const routes = await response.json();
+                
+                const routesList = document.getElementById('routes-list');
+                routesList.innerHTML = '';
+                
+                if (routes.length === 0) {
+                    routesList.innerHTML = '<p class="text-center text-muted">Nenhuma rota cadastrada</p>';
+                    return;
+                }
+                
+                routes.forEach(route => {
+                    const routeCard = document.createElement('div');
+                    routeCard.className = 'route-card';
+                    routeCard.onclick = () => openRoute(route.route_date);
+                    
+                    const routeDate = new Date(route.route_date + 'T00:00:00');
+                    const formattedDate = routeDate.toLocaleDateString('pt-BR', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    
+                    // Verifica se é hoje
+                    const today = new Date().toISOString().split('T')[0];
+                    const isToday = route.route_date === today;
+                    
+                    const statusText = {
+                        'planned': 'Planejada',
+                        'active': 'Em andamento',
+                        'completed': 'Concluída',
+                        'cancelled': 'Cancelada'
+                    };
+                    
+                    const statusClass = {
+                        'planned': 'status-pending',
+                        'active': 'status-in_transit',
+                        'completed': 'status-delivered',
+                        'cancelled': 'status-cancelled'
+                    };
+                    
+                    routeCard.innerHTML = `
+                        <h3>${formattedDate} ${isToday ? '<span style="color: #E5B5B3;">(Hoje)</span>' : ''}</h3>
+                        <div class="route-stats">
+                            <span>📦 ${route.delivery_count || 0} entregas</span>
+                            ${route.delivered_count ? `<span>✅ ${route.delivered_count} entregues</span>` : ''}
+                            <span class="status ${statusClass[route.status || 'planned']}">${statusText[route.status || 'planned']}</span>
+                            ${route.total_distance ? `<span>🚗 ${(route.total_distance/1000).toFixed(1)} km</span>` : ''}
+                            ${route.total_duration ? `<span>⏱️ ${Math.round(route.total_duration/60)} min</span>` : ''}
+                        </div>
+                    `;
+                    
+                    routesList.appendChild(routeCard);
+                });
+            } catch (error) {
+                console.error('Erro ao carregar rotas:', error);
+                document.getElementById('routes-list').innerHTML = 
+                    '<p class="text-center text-muted">Erro ao carregar rotas. Verifique se o servidor está ativo.</p>';
+            }
+        }
+        
+        function createNewRoute() {
+            const date = document.getElementById('new-route-date').value;
+            if (!date) {
+                showToast('Por favor, selecione uma data', 'error');
+                return;
+            }
+            
+            // Redireciona para a página de rotas com a data selecionada
+            window.location.href = `routes.html?date=${date}`;
+        }
+        
+        function openRoute(date) {
+            window.location.href = `routes.html?date=${date}`;
+        }
+        
+        // Sistema de Toast
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <span>${message}</span>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+        
+        // Carrega rotas ao iniciar
+        loadRoutes();
+        
+        // Atualiza a cada 30 segundos
+        setInterval(loadRoutes, 30000);
+    </script>
+</body>
+</html>

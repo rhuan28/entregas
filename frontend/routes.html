@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotas do Dia - Sistema de Entregas</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyByMhUX-axD8w4HmmcPVUs7WNFsZDVLy64&libraries=places"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+    /* Estilos para integração com Alloy */
+    .alloy-integration {
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border: 1px solid #f0e6e5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .alloy-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        gap: 15px;
+    }
+
+    .alloy-description {
+        margin-bottom: 15px;
+        color: #6c757d;
+        text-align: center;
+    }
+
+    .alloy-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .btn-alloy {
+        background-color: #4B5563;
+        color: white;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+    }
+
+    .btn-alloy:hover {
+        background-color: #374151;
+    }
+
+    .alloy-info {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .alloy-sync-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .alloy-sync-badge.synced {
+        background-color: #DCFCE7;
+        color: #16A34A;
+    }
+
+    .alloy-sync-badge.pending {
+        background-color: #FEF3C7;
+        color: #D97706;
+    }
+
+    .alloy-sync-badge.error {
+        background-color: #FEE2E2;
+        color: #DC2626;
+    }
+
+    .alloy-sync-badge .loading {
+        width: 12px;
+        height: 12px;
+        border-width: 2px;
+    }
+
+    .alloy-cache-info {
+        color: #0369A1;
+        font-size: 12px;
+        background-color: #E0F2FE;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+
+    .alloy-api-limit-info {
+        color: #B45309;
+        font-size: 11px;
+        opacity: 0.8;
+    }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <div class="navbar-header">
+                <h1 class="navbar-title">🎂 Confeitaria Entregas</h1>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="route-header">
+            <div>
+                <h1>Rotas - <span id="route-date"></span></h1>
+            </div>
+            <button onclick="window.location.href='home.html'" class="btn btn-secondary">
+                ← VOLTAR
+            </button>
+        </div>
+        
+        <!-- Informações da Rota -->
+        <div class="route-info">
+            <div class="route-stats">
+                <div class="route-stat">
+                    <strong id="total-deliveries">0</strong>
+                    <span>ENTREGAS</span>
+                </div>
+                <div class="route-stat">
+                    <strong id="total-distance">0 km</strong>
+                    <span>DISTÂNCIA</span>
+                </div>
+                <div class="route-stat">
+                    <strong id="total-time">0 min</strong>
+                    <span>TEMPO EST.</span>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button id="clear-all" class="btn btn-danger" onclick="clearAllDeliveries()">
+                    🗑️ LIMPAR TUDO
+                </button>
+                <button id="share-route" class="btn btn-share" onclick="shareRoute()" disabled>
+                    📤 COMPARTILHAR
+                </button>
+            </div>
+        </div>
+        
+        <!-- Menu superior -->
+        <div class="top-menu">
+            <button id="settings-btn" class="btn btn-secondary" onclick="openSettings()">
+                ⚙️ CONFIGURAÇÕES
+            </button>
+        </div>
+        
+        <!-- Integração Alloy -->
+        <div class="alloy-integration">
+            <div class="alloy-header">
+                <h2>Integração Alloy</h2>
+                <div id="alloy-sync-badge" class="alloy-sync-badge pending">
+                    <span class="loading"></span>
+                </div>
+            </div>
+            <p class="alloy-description">Importe pedidos agendados do sistema Alloy</p>
+            <div class="alloy-actions">
+                <button id="import-alloy-btn" class="btn btn-alloy" onclick="importAlloyOrders(getRouteDate())">
+                    🔄 Importar Alloy
+                </button>
+                <div class="alloy-info">
+                    <div id="cache-info" class="alloy-cache-info" style="display:none;">
+                        Usando dados em cache
+                    </div>
+                    <div id="api-limit-info" class="alloy-api-limit-info">
+                        Limite de 1 requisição por importação
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Formulário de Nova Entrega -->
+        <div class="form-section">
+            <h2>Nova Entrega</h2>
+            <form id="delivery-form">
+                <div class="form-group">
+                    <label>NOME DO CLIENTE:</label>
+                    <input type="text" name="customer_name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>TELEFONE:</label>
+                    <input type="tel" name="customer_phone" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>ENDEREÇO:</label>
+                    <input type="text" name="address" id="address-input" placeholder="Digite um local" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>DESCRIÇÃO DO PRODUTO:</label>
+                    <textarea name="product_description" required placeholder="Ex: Bolo de chocolate 2kg"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>TAMANHO:</label>
+                    <select name="size">
+                        <option value="P">Pequeno</option>
+                        <option value="M" selected>Médio</option>
+                        <option value="G">Grande</option>
+                        <option value="GG">Extra Grande</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>PRIORIDADE:</label>
+                    <select name="priority">
+                        <option value="0">Normal</option>
+                        <option value="1">Alta</option>
+                        <option value="2">Urgente</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>JANELA DE ENTREGA (OPCIONAL):</label>
+                    <div class="time-window">
+                        <input type="time" name="delivery_window_start">
+                        <span>até</span>
+                        <input type="time" name="delivery_window_end">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">ADICIONAR ENTREGA</button>
+            </form>
+        </div>
+        
+        <!-- Lista de Entregas -->
+        <div class="deliveries-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Entregas do Dia</h2>
+                <button onclick="addPickupStop()" class="btn btn-secondary">
+                    🏪 ADICIONAR PARADA NA CONFEITARIA
+                </button>
+            </div>
+            
+            <div id="deliveries-list">
+                <!-- Entregas serão carregadas aqui -->
+            </div>
+            
+            <button id="optimize-route" class="btn btn-success">
+                🗺️ OTIMIZAR ROTA
+            </button>
+        </div>
+        
+        <!-- Mapa -->
+        <div class="map-section">
+            <h2>Mapa da Rota</h2>
+            <div id="map"></div>
+            <div class="map-controls">
+                <button id="start-route" class="btn btn-primary" disabled>
+                    ▶️ INICIAR ENTREGA
+                </button>
+                <button id="track-driver" class="btn btn-info" disabled>
+                    📍 RASTREAR ENTREGADOR
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Configurações -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Configurações</h2>
+                <span class="close" onclick="closeSettings()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <h3>Configurações de Rota</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="circular-route" checked>
+                            Rota Circular (retorna ao ponto de origem)
+                        </label>
+                        <p class="setting-description">
+                            Quando ativado, o entregador retorna à confeitaria após a última entrega.
+                        </p>
+                    </div>
+                    <div class="setting-item">
+                        <label>Tempo médio por parada (minutos):</label>
+                        <input type="number" id="stop-time" value="8" min="1" max="60" class="form-control">
+                        <p class="setting-description">
+                            Tempo estimado que o entregador leva em cada parada para realizar a entrega.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Endereço da Confeitaria</h3>
+                    <div class="setting-item">
+                        <label>Endereço:</label>
+                        <input type="text" id="origin-address" value="R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030" class="form-control">
+                        <p class="setting-description">
+                            Endereço de origem das entregas.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveSettings()">Salvar</button>
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/routes.js"></script>
+    <script>
+    // Contador de cliques para evitar múltiplas requisições
+    let alloyRequestInProgress = false;
+
+    /**
+     * Importa pedidos do Alloy para a data atual
+     * Garante que apenas uma requisição seja feita por vez
+     * @param {String} date - Data no formato YYYY-MM-DD
+     */
+    function importAlloyOrders(date) {
+        // Evita múltiplos cliques simultâneos
+        if (alloyRequestInProgress) {
+            showToast('Uma importação já está em andamento, aguarde...', 'info');
+            return;
+        }
+        
+        // Marca que está em progresso
+        alloyRequestInProgress = true;
+        
+        // Mostra indicador de carregamento
+        const importBtn = document.getElementById('import-alloy-btn');
+        const originalText = importBtn.innerHTML;
+        importBtn.innerHTML = '<span class="loading"></span> Importando...';
+        importBtn.disabled = true;
+        
+        // Oculta indicador de cache
+        document.getElementById('cache-info').style.display = 'none';
+        
+        // Faz a requisição para importar pedidos
+        fetch(`${API_URL}/alloy/import`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ date })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(result => {
+            // Restaura botão
+            importBtn.innerHTML = originalText;
+            importBtn.disabled = false;
+            
+            // Exibe resultado da importação
+            let messageType = 'info';
+            let message = '';
+            
+            if (result.success) {
+                messageType = 'success';
+                if (result.imported > 0) {
+                    message = `Sucesso! ${result.imported} novos pedidos importados`;
+                } else if (result.failures > 0) {
+                    messageType = 'warning';
+                    message = `Importação com problemas: ${result.failures} falhas. Por favor, tente novamente.`;
+                } else {
+                    message = `Nenhum novo pedido para importar. ${result.alreadyImported} pedidos já importados anteriormente.`;
+                }
+                
+                // Recarrega lista de entregas
+                loadDeliveries();
+                
+                // Atualiza badge de sincronização
+                updateSyncStatus(date);
+            } else {
+                messageType = 'error';
+                message = `Erro: ${result.error || 'Falha na importação'}`;
+            }
+            
+            showToast(message, messageType);
+        })
+        .catch(error => {
+            console.error('Erro ao importar pedidos do Alloy:', error);
+            showToast(`Erro ao importar: ${error.message}`, 'error');
+            
+            // Restaura botão
+            importBtn.innerHTML = originalText;
+            importBtn.disabled = false;
+        })
+        .finally(() => {
+            // Marca que terminou o processo
+            alloyRequestInProgress = false;
+        });
+    }
+
+    /**
+     * Verifica status de sincronização com o Alloy
+     * Usa cache quando possível para evitar requisições extras
+     * @param {String} date - Data no formato YYYY-MM-DD
+     */
+    function updateSyncStatus(date) {
+        const badge = document.getElementById('alloy-sync-badge');
+        if (!badge) return;
+        
+        badge.innerHTML = '<span class="loading"></span>';
+        badge.className = 'alloy-sync-badge pending';
+        
+        fetch(`${API_URL}/alloy/sync-status?date=${date}`)
+            .then(response => response.json())
+            .then(result => {
+                // Mostra indicador de cache se estiver usando cache
+                if (result.usingCache) {
+                    document.getElementById('cache-info').style.display = 'block';
+                } else {
+                    document.getElementById('cache-info').style.display = 'none';
+                }
+                
+                if (result.success) {
+                    if (result.syncStatus === 'synced') {
+                        badge.innerHTML = `<span>✓ Sincronizado</span>`;
+                        badge.className = 'alloy-sync-badge synced';
+                    } else if (result.notImported > 0) {
+                        badge.innerHTML = `<span>${result.notImported} pendente${result.notImported > 1 ? 's' : ''}</span>`;
+                        badge.className = 'alloy-sync-badge pending';
+                    } else if (result.totalAlloy === 0 && !result.apiError) {
+                        badge.innerHTML = `<span>Sem pedidos</span>`;
+                        badge.className = 'alloy-sync-badge synced';
+                    } else if (result.apiError) {
+                        badge.innerHTML = `<span>Verificado localmente</span>`;
+                        badge.className = 'alloy-sync-badge pending';
+                    }
+                } else {
+                    badge.innerHTML = `<span>!</span>`;
+                    badge.className = 'alloy-sync-badge error';
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar status de sincronização:', error);
+                badge.innerHTML = `<span>!</span>`;
+                badge.className = 'alloy-sync-badge error';
+            });
+    }
+
+    // Ao carregar a página, verifica o status de sincronização
+    document.addEventListener('DOMContentLoaded', function() {
+        // Verifica se o badge existe antes de tentar atualizar
+        if (document.getElementById('alloy-sync-badge')) {
+            updateSyncStatus(getRouteDate());
+        }
+    });
+    </script>
+</body>
+</html>

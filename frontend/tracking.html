@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreamento de Entrega - Confeitaria</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyByMhUX-axD8w4HmmcPVUs7WNFsZDVLy64"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="tracking-container">
+        <div class="tracking-header">
+            <h1>🎂 Rastreamento de Entrega</h1>
+            <div id="delivery-info"></div>
+        </div>
+        
+        <div id="tracking-map"></div>
+        
+        <div class="tracking-status">
+            <h2>Status da Entrega</h2>
+            <div id="status-timeline">
+                <div class="timeline-item" id="status-pending">
+                    <div class="timeline-icon">📋</div>
+                    <div class="timeline-content">
+                        <h3>Pedido Recebido</h3>
+                        <p>Sua entrega foi registrada</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item" id="status-optimized">
+                    <div class="timeline-icon">🗺️</div>
+                    <div class="timeline-content">
+                        <h3>Rota Planejada</h3>
+                        <p>Preparando sua entrega</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item" id="status-in_transit">
+                    <div class="timeline-icon">🚚</div>
+                    <div class="timeline-content">
+                        <h3>Saiu para Entrega</h3>
+                        <p>Entregador a caminho</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item" id="status-delivered">
+                    <div class="timeline-icon">✅</div>
+                    <div class="timeline-content">
+                        <h3>Entregue</h3>
+                        <p>Pedido entregue com sucesso!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="estimated-time">
+            <h3>Tempo Estimado</h3>
+            <p id="eta">Calculando...</p>
+        </div>
+    </div>
+    
+    <script src="js/tracking.js"></script>
+</body>
+</html>

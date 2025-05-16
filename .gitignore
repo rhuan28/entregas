@@ -1,0 +1,17 @@
+# Dependências
+node_modules/
+
+# Arquivos de ambiente
+#.env
+
+# Logs
+logs
+*.log
+
+# Diretórios de compilação
+dist/
+build/
+
+# Outros
+.DS_Store
+.vscode/

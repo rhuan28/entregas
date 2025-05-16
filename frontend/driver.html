@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Entregador - Confeitaria</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .status {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .button {
+            width: 100%;
+            padding: 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .button.danger {
+            background-color: #dc3545;
+        }
+        .info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        .location-status {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>???? App Entregador</h1>
+        
+        <div class="status">
+            <h2>Status: <span id="status-text">Aguardando Rota</span></h2>
+        </div>
+        
+        <div id="route-info" style="display: none;">
+            <h3>Rota Ativa</h3>
+            <div id="deliveries-list"></div>
+        </div>
+        
+        <button id="start-tracking" class="button" disabled>Iniciar Rastreamento</button>
+        <button id="stop-tracking" class="button danger" style="display: none;">Parar Rastreamento</button>
+        
+        <div class="location-status" id="location-status"></div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const socket = io('http://localhost:3000');
+        
+        let currentRoute = null;
+        let trackingInterval = null;
+        let watchId = null;
+        
+        // Verifica se h?? rota ativa
+        async function checkActiveRoute() {
+            try {
+                const response = await fetch(`${API_URL}/tracking/route/active`);
+                const data = await response.json();
+                
+                if (data.active) {
+                    currentRoute = data;
+                    showRouteInfo();
+                    document.getElementById('start-tracking').disabled = false;
+                    document.getElementById('status-text').textContent = 'Rota Dispon??vel';
+                }
+            } catch (error) {
+                console.error('Erro ao verificar rota:', error);
+            }
+        }
+        
+        // Mostra informa????es da rota
+        function showRouteInfo() {
+            document.getElementById('route-info').style.display = 'block';
+            const list = document.getElementById('deliveries-list');
+            list.innerHTML = '';
+            
+            currentRoute.deliveries.forEach((delivery, index) => {
+                const div = document.createElement('div');
+                div.className = 'info';
+                div.innerHTML = `
+                    <strong>${index + 1}. ${delivery.customer_name}</strong><br>
+                    ${delivery.address}<br>
+                    ${delivery.product_description}<br>
+                    <button onclick="completeDelivery(${delivery.id})" 
+                            ${delivery.status === 'delivered' ? 'disabled' : ''}>
+                        ${delivery.status === 'delivered' ? 'Entregue ???' : 'Marcar como Entregue'}
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+        }
+        
+        // Inicia rastreamento
+        document.getElementById('start-tracking').addEventListener('click', () => {
+            if (!currentRoute) return;
+            
+            // Inicia GPS
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        updateLocation(position.coords.latitude, position.coords.longitude);
+                    },
+                    (error) => {
+                        console.error('Erro GPS:', error);
+                        document.getElementById('location-status').textContent = 
+                            'Erro ao obter localiza????o GPS';
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0
+                    }
+                );
+                
+                document.getElementById('start-tracking').style.display = 'none';
+                document.getElementById('stop-tracking').style.display = 'block';
+                document.getElementById('status-text').textContent = 'Rastreamento Ativo';
+                document.getElementById('location-status').textContent = 'GPS Ativo';
+            } else {
+                alert('Geolocaliza????o n??o suportada!');
+            }
+        });
+        
+        // Para rastreamento
+        document.getElementById('stop-tracking').addEventListener('click', () => {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            document.getElementById('start-tracking').style.display = 'block';
+            document.getElementById('stop-tracking').style.display = 'none';
+            document.getElementById('status-text').textContent = 'Rastreamento Parado';
+            document.getElementById('location-status').textContent = '';
+        });
+        
+        // Atualiza localiza????o
+        function updateLocation(lat, lng) {
+            // Envia para o servidor
+            fetch(`${API_URL}/tracking/location`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    routeId: currentRoute.route.id,
+                    deliveryId: getCurrentDeliveryId(),
+                    lat: lat,
+                    lng: lng
+                })
+            });
+            
+            // Envia via socket
+            socket.emit('update-location', {
+                routeId: currentRoute.route.id,
+                lat: lat,
+                lng: lng,
+                timestamp: new Date()
+            });
+            
+            document.getElementById('location-status').textContent = 
+                `??ltima atualiza????o: ${new Date().toLocaleTimeString()}`;
+        }
+        
+        // Obt??m ID da entrega atual
+        function getCurrentDeliveryId() {
+            const activeDelivery = currentRoute.deliveries.find(d => d.status === 'in_transit');
+            return activeDelivery ? activeDelivery.id : null;
+        }
+        
+        // Marca entrega como conclu??da
+        async function completeDelivery(deliveryId) {
+            try {
+                const response = await fetch(`${API_URL}/deliveries/${deliveryId}/complete`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    alert('Entrega conclu??da!');
+                    checkActiveRoute(); // Recarrega informa????es
+                }
+            } catch (error) {
+                console.error('Erro ao completar entrega:', error);
+            }
+        }
+        
+        // Inicializa
+        checkActiveRoute();
+        setInterval(checkActiveRoute, 30000); // Verifica a cada 30 segundos
+    </script>
+</body>
+</html>
