@@ -1,4 +1,4 @@
-// alloyService.js - Correção para a data de agendamento
+// alloyService.js - Versão atualizada para criar entradas de rotas
 const axios = require('axios');
 require('dotenv').config();
 
@@ -6,6 +6,7 @@ require('dotenv').config();
  * Serviço para comunicação com a API Alloy
  * Otimizado para realizar uma única requisição por vez
  * Com correção para usar a data de agendamento correta
+ * E criação automática de entradas de rota
  */
 class AlloyService {
     constructor() {

@@ -5,6 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Entregas - Confeitaria</title>
     <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .route-card {
+            position: relative;
+        }
+        
+        .route-delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: #dc3545;
+            font-size: 1.2rem;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+        
+        .route-delete-btn:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+    </style>
 </head>
 <body>
     <!-- Navbar -->
@@ -65,15 +88,31 @@
                 routes.forEach(route => {
                     const routeCard = document.createElement('div');
                     routeCard.className = 'route-card';
-                    routeCard.onclick = () => openRoute(route.route_date);
+                    routeCard.onclick = (e) => {
+                        // Evita que o clique no botão de exclusão navegue para a rota
+                        if (e.target.classList.contains('route-delete-btn') || 
+                            e.target.closest('.route-delete-btn')) {
+                            return;
+                        }
+                        openRoute(route.route_date);
+                    };
                     
-                    const routeDate = new Date(route.route_date + 'T00:00:00');
-                    const formattedDate = routeDate.toLocaleDateString('pt-BR', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
+                    // Formatação correta da data
+                    let formattedDate = 'Data indisponível';
+                    if (route.route_date) {
+                        try {
+                            // Adiciona timezone para evitar erro de data inválida
+                            const routeDate = new Date(route.route_date + 'T00:00:00');
+                            formattedDate = routeDate.toLocaleDateString('pt-BR', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            });
+                        } catch (error) {
+                            console.error('Erro ao formatar data:', error);
+                        }
+                    }
                     
                     // Verifica se é hoje
                     const today = new Date().toISOString().split('T')[0];
@@ -102,6 +141,7 @@
                             ${route.total_distance ? `<span>🚗 ${(route.total_distance/1000).toFixed(1)} km</span>` : ''}
                             ${route.total_duration ? `<span>⏱️ ${Math.round(route.total_duration/60)} min</span>` : ''}
                         </div>
+                        <button class="route-delete-btn" title="Excluir rota" onclick="deleteRoute('${route.route_date}', event)">🗑️</button>
                     `;
                     
                     routesList.appendChild(routeCard);
@@ -126,6 +166,29 @@
         
         function openRoute(date) {
             window.location.href = `routes.html?date=${date}`;
+        }
+        
+        async function deleteRoute(date, event) {
+            // Previne que o evento se propague para o card
+            event.stopPropagation();
+            
+            if (!confirm(`Tem certeza que deseja excluir a rota do dia ${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/deliveries/clear/${date}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showToast('Rota excluída com sucesso!', 'success');
+                    loadRoutes(); // Recarrega a lista
+                }
+            } catch (error) {
+                console.error('Erro ao excluir rota:', error);
+                showToast('Erro ao excluir rota', 'error');
+            }
         }
         
         // Sistema de Toast

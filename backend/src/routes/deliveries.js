@@ -1,388 +1,326 @@
-// routes/deliveries.js - Versão atualizada
-const express = require('express');
-const router = express.Router();
-const mysql = require('mysql2/promise');
-const googleMaps = require('../services/googleMaps');
-const routeOptimization = require('../services/routeOptimization');
+// alloyService.js - Versão atualizada para criar entradas de rotas
+const axios = require('axios');
+require('dotenv').config();
 
-// Pool de conexões MySQL
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'confeitaria_entregas',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-// Endereço da confeitaria (depot)
-const CONFEITARIA_ADDRESS = {
-    address: 'R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030',
-    lat: -22.894334936369436,
-    lng: -47.0640515913573
-};
-
-// Lista entregas por data
-router.get('/', async (req, res) => {
-    try {
-        const { date } = req.query;
-        let query = 'SELECT * FROM deliveries';
-        let params = [];
+/**
+ * Serviço para comunicação com a API Alloy
+ * Otimizado para realizar uma única requisição por vez
+ * Com correção para usar a data de agendamento correta
+ * E criação automática de entradas de rota
+ */
+class AlloyService {
+    constructor() {
+        // Token fornecido pelo usuário
+        this.token = '682643ed92d4c';
+        this.baseURL = 'https://api.alloy.al/api';
         
-        if (date) {
-            query += ' WHERE order_date = ?';
-            params.push(date);
-        } else {
-            query += ' WHERE order_date = CURDATE()';
+        // Armazena dados em cache para evitar múltiplas requisições
+        this.cachedOrders = null;
+        this.cachedDate = null;
+        this.isFetching = false;
+    }
+
+    /**
+     * Obtém pedidos do Alloy para a data especificada
+     * Garante apenas uma requisição por vez e usa cache
+     * 
+     * @param {string} date - Data no formato YYYY-MM-DD
+     * @param {boolean} forceRefresh - Se verdadeiro, ignora o cache
+     * @returns {Promise<Array>} - Lista de pedidos
+     */
+    async getOrders(date = null, forceRefresh = false) {
+        // Se estiver buscando dados, espera a conclusão
+        if (this.isFetching) {
+            console.log('Uma requisição já está em andamento. Aguardando...');
+            while (this.isFetching) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return this.cachedOrders || [];
         }
-        
-        query += ' ORDER BY priority DESC';
-        
-        const [rows] = await pool.execute(query, params);
-        res.json(rows);
-    } catch (error) {
-        console.error('Erro ao buscar entregas:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
 
-// Lista rotas por data ou todas - ENDPOINT CORRIGIDO
-router.get('/routes', async (req, res) => {
-    try {
-        const query = `
-            SELECT 
-                r.id,
-                r.route_date,
-                r.status,
-                r.total_distance,
-                r.total_duration,
-                COUNT(DISTINCT d.id) as delivery_count,
-                COUNT(DISTINCT CASE WHEN d.status = 'delivered' THEN d.id END) as delivered_count
-            FROM routes r 
-            LEFT JOIN deliveries d ON r.route_date = d.order_date 
-            GROUP BY r.id 
-            ORDER BY r.route_date DESC
-            LIMIT 30
-        `;
-        
-        const [rows] = await pool.execute(query);
-        res.json(rows);
-    } catch (error) {
-        console.error('Erro ao buscar rotas:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Limpa todas as entregas de uma data
-router.delete('/clear/:date', async (req, res) => {
-    try {
-        const { date } = req.params;
-        
-        // Primeiro deleta notificações e rastreamento
-        await pool.execute(
-            'DELETE n FROM notifications n JOIN deliveries d ON n.delivery_id = d.id WHERE d.order_date = ?',
-            [date]
-        );
-        
-        await pool.execute(
-            'DELETE t FROM tracking t JOIN deliveries d ON t.delivery_id = d.id WHERE d.order_date = ?',
-            [date]
-        );
-        
-        // Deleta as entregas
-        await pool.execute(
-            'DELETE FROM deliveries WHERE order_date = ?',
-            [date]
-        );
-        
-        // Cancela rotas do dia
-        await pool.execute(
-            'UPDATE routes SET status = "cancelled" WHERE route_date = ?',
-            [date]
-        );
-        
-        res.json({ message: 'Todas as entregas foram removidas' });
-    } catch (error) {
-        console.error('Erro ao limpar entregas:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Adiciona nova entrega
-router.post('/', async (req, res) => {
-    try {
-        const { 
-            customer_name, 
-            customer_phone, 
-            address, 
-            product_description, 
-            size, 
-            priority, 
-            delivery_window_start, 
-            delivery_window_end,
-            order_date 
-        } = req.body;
-        
-        // Geocodifica o endereço
-        const coords = await googleMaps.geocodeAddress(address);
-        
-        const [result] = await pool.execute(
-            `INSERT INTO deliveries (
-                order_date, customer_name, customer_phone, address, 
-                lat, lng, product_description, size, priority, 
-                delivery_window_start, delivery_window_end
-            ) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                order_date || new Date().toISOString().split('T')[0],
-                customer_name, 
-                customer_phone, 
-                coords.formatted_address, 
-                coords.lat, 
-                coords.lng, 
-                product_description, 
-                size, 
-                priority, 
-                delivery_window_start, 
-                delivery_window_end
-            ]
-        );
-        
-        res.json({ id: result.insertId, ...req.body, ...coords });
-    } catch (error) {
-        console.error('Erro ao adicionar entrega:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Otimiza rota com ordem manual e paradas
-router.post('/optimize', async (req, res) => {
-    try {
-        const { date, manualOrder, pickupStops } = req.body;
-        const routeDate = date || new Date().toISOString().split('T')[0];
-        
-        // Busca configurações
-        const [settingsRows] = await pool.execute(
-            'SELECT * FROM settings WHERE setting_key IN ("circular_route", "origin_address", "stop_time")'
-        );
-        
-        const settings = {};
-        settingsRows.forEach(row => {
-            settings[row.setting_key] = row.setting_value;
-        });
-        
-        // Cancela rotas anteriores não finalizadas
-        await pool.execute(
-            'UPDATE routes SET status = "cancelled" WHERE route_date = ? AND status IN ("planned", "active")',
-            [routeDate]
-        );
-        
-        // Busca todas as entregas do dia
-        const [deliveries] = await pool.execute(
-            'SELECT * FROM deliveries WHERE order_date = ? AND status IN ("pending", "optimized") ORDER BY priority DESC, id ASC',
-            [routeDate]
-        );
-        
-        if (deliveries.length === 0) {
-            return res.json({ message: 'Nenhuma entrega disponível para otimização' });
+        // Verifica se já temos dados em cache para esta data
+        if (!forceRefresh && this.cachedOrders && this.cachedDate === date) {
+            console.log(`Usando dados em cache para a data ${date}`);
+            return this.cachedOrders;
         }
-        
-        // Aplica ordem manual se existir, mas mantém prioridade como critério principal
-        if (manualOrder && Object.keys(manualOrder).length > 0) {
-            deliveries.sort((a, b) => {
-                // Primeiro ordena por prioridade (maior primeiro)
-                if (a.priority !== b.priority) {
-                    return b.priority - a.priority;
-                }
-                // Depois por ordem manual se existir
-                const orderA = manualOrder[a.id] || 999;
-                const orderB = manualOrder[b.id] || 999;
-                return orderA - orderB;
+
+        try {
+            // Marca que está fazendo uma requisição
+            this.isFetching = true;
+            
+            // Constrói a URL com os parâmetros corretos para pedidos agendados
+            let url = `${this.baseURL}/delivery/getorders`;
+            
+            // Se uma data específica for fornecida, adiciona ao filtro
+            if (date) {
+                url += `?data_agendamento=${date}`;
+            }
+            
+            console.log(`Fazendo requisição única à API Alloy: ${url}`);
+            
+            // Faz a requisição com o formato correto de autenticação
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                },
+                timeout: 15000 // 15 segundos de timeout
             });
+
+            console.log(`Resposta da API Alloy: status ${response.status}`);
+            
+            if (response.data && response.data.status === "success") {
+                const orders = response.data.pedidos || [];
+                console.log(`Recebidos ${orders.length} pedidos do Alloy`);
+                
+                // Armazena em cache
+                this.cachedOrders = orders;
+                this.cachedDate = date;
+                
+                return orders;
+            } else {
+                console.error('API Alloy retornou erro:', response.data);
+                throw new Error(response.data.message || 'Falha ao obter pedidos do Alloy');
+            }
+        } catch (error) {
+            // Trata erros específicos
+            if (error.response) {
+                const status = error.response.status;
+                console.error(`Erro ${status} na requisição à API Alloy:`, error.response.data);
+                
+                if (status === 429) {
+                    throw new Error('Limite de requisições excedido na API Alloy. Tente novamente mais tarde.');
+                }
+                
+                throw new Error(`Erro na API Alloy: ${error.response.data.message || status}`);
+            }
+            
+            console.error('Erro ao buscar pedidos do Alloy:', error.message);
+            throw error;
+        } finally {
+            // Marca que terminou a requisição
+            this.isFetching = false;
         }
+    }
+
+    /**
+     * Limpa o cache de pedidos
+     */
+    clearCache() {
+        this.cachedOrders = null;
+        this.cachedDate = null;
+        console.log('Cache de pedidos do Alloy limpo');
+    }
+
+    /**
+     * Transforma um pedido do Alloy no formato usado pelo sistema de entregas
+     * @param {Object} order - Pedido do Alloy
+     * @returns {Object} - Pedido formatado para o sistema de entregas
+     */
+    transformOrderToDelivery(order) {
+        // Extrai os dados do endereço - usando endereco_de_entrega
+        const address = this._formatAddress(order.endereco_de_entrega);
         
-        // Define se a rota é circular
-        const circularRoute = settings.circular_route === 'true';
+        // Usa a data de agendamento correta em vez da data atual
+        // Isso garante que o pedido seja importado para a data correta
+        let orderDate = new Date().toISOString().split('T')[0]; // Padrão: data atual
         
-        // Define endereço de origem
-        const originAddress = settings.origin_address || CONFEITARIA_ADDRESS.address;
-        let depot = {
-            ...CONFEITARIA_ADDRESS,
-            address: originAddress
-        };
-        
-        if (originAddress !== CONFEITARIA_ADDRESS.address) {
+        // Se for pedido agendado, usa a data de agendamento
+        if (order.agendamento === 1 && order.data_agendamento) {
             try {
-                const coords = await googleMaps.geocodeAddress(originAddress);
-                depot = {
-                    address: originAddress,
-                    lat: coords.lat,
-                    lng: coords.lng
-                };
+                // Extrai apenas a data do campo data_agendamento (formato: YYYY-MM-DD HH:MM:SS)
+                const agendamentoDate = new Date(order.data_agendamento);
+                if (!isNaN(agendamentoDate)) {
+                    orderDate = agendamentoDate.toISOString().split('T')[0];
+                    console.log(`Usando data de agendamento: ${orderDate} para pedido ${order.ref}`);
+                }
             } catch (error) {
-                console.error('Erro ao geocodificar endereço de origem:', error);
+                console.error('Erro ao extrair data de agendamento:', error);
+                // Mantém a data atual em caso de erro
             }
         }
         
-        // Adiciona paradas na confeitaria se solicitado
-        let allStops = [...deliveries];
-        if (pickupStops && pickupStops.length > 0) {
-            pickupStops.forEach(stop => {
-                allStops.push({
-                    id: `pickup_${Date.now()}_${Math.random()}`,
-                    lat: depot.lat,
-                    lng: depot.lng,
-                    address: depot.address,
-                    type: 'pickup',
-                    priority: 0,
-                    order: stop.order
-                });
-            });
-            
-            // Reordena incluindo as paradas
-            allStops.sort((a, b) => {
-                // Prioridade primeiro
-                const prioA = a.priority || 0;
-                const prioB = b.priority || 0;
-                if (prioA !== prioB) {
-                    return prioB - prioA;
-                }
+        // Formata a janela de entrega
+        let deliveryWindowStart = null;
+        let deliveryWindowEnd = null;
+        
+        // Verificamos se é um pedido agendado
+        if (order.agendamento === 1) {
+            try {
+                // Extrai hora do agendamento (padrão 10:00:00 para entregas)
+                // Baseado na descrição do pedido, as entregas são das 10h às 14h30
+                const defaultHour = "10:00:00";
                 
-                // Depois ordem manual
-                const orderA = a.type === 'pickup' ? a.order : (manualOrder[a.id] || 999);
-                const orderB = b.type === 'pickup' ? b.order : (manualOrder[b.id] || 999);
-                return orderA - orderB;
-            });
+                // Formata para HH:MM:SS
+                deliveryWindowStart = this._formatTimeForMySQL(defaultHour);
+                
+                // Janela de entrega até 14:30 por padrão
+                deliveryWindowEnd = "14:30:00";
+            } catch (error) {
+                console.error('Erro ao processar data de agendamento:', error);
+            }
         }
         
-        // Volta todas as entregas otimizadas para pendente temporariamente
-        await pool.execute(
-            'UPDATE deliveries SET status = "pending" WHERE order_date = ? AND status = "optimized"',
-            [routeDate]
-        );
+        // Determina a prioridade com base em diversos fatores
+        const priority = this._determinePriority(order);
         
-        // Otimiza a rota
-        const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder);
-        
-        // Salva nova rota otimizada
-        const [routeResult] = await pool.execute(
-            'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES (?, ?, ?, ?)',
-            [routeDate, optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder)]
-        );
-        
-        // Atualiza status de todas as entregas incluídas para "optimized"
-        await pool.execute(
-            'UPDATE deliveries SET status = "optimized" WHERE order_date = ? AND status = "pending"',
-            [routeDate]
-        );
-        
-        res.json({
-            routeId: routeResult.insertId,
-            ...optimizedRoute,
-            circularRoute: circularRoute,
-            originAddress: originAddress,
-            totalDeliveries: deliveries.length,
-            totalStops: allStops.length
-        });
-    } catch (error) {
-        console.error('Erro na otimização:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
+        // Cria descrição do produto a partir dos itens
+        const productDescription = this._formatProductDescription(order.itens);
 
-// Demais rotas permanecem iguais...
-// Inicia rota
-router.post('/routes/:id/start', async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        await pool.execute(
-            'UPDATE routes SET status = "active" WHERE id = ?',
-            [id]
-        );
-        
-        await pool.execute(
-            'UPDATE deliveries d JOIN routes r ON r.route_date = d.order_date SET d.status = "in_transit" WHERE r.id = ?',
-            [id]
-        );
-        
-        // Notifica clientes via socket
-        const io = req.app.get('socketio');
-        io.to(`route-${id}`).emit('route-started', { routeId: id });
-        
-        res.json({ message: 'Rota iniciada' });
-    } catch (error) {
-        console.error('Erro ao iniciar rota:', error);
-        res.status(500).json({ error: error.message });
+        return {
+            external_order_id: `alloy_${order.ref}`,
+            order_date: orderDate, // Usa a data de agendamento
+            customer_name: `${order.usuario.nome} ${order.usuario.sobrenome || ''}`.trim(),
+            customer_phone: order.usuario.telefone || '',
+            address: address,
+            product_description: productDescription,
+            size: this._determineSize(order.itens),
+            priority: priority,
+            delivery_window_start: deliveryWindowStart,
+            delivery_window_end: deliveryWindowEnd,
+            // Campos adicionais específicos do Alloy
+            external_system: 'alloy',
+            payment_method: order.meio_de_pagamento || '',
+            total: order.total || 0,
+            observations: order.obs || ''
+        };
     }
-});
 
-// Marca entrega como concluída
-router.post('/:id/complete', async (req, res) => {
-    try {
-        const { id } = req.params;
+    /**
+     * Formata o endereço a partir dos dados do Alloy
+     * @private
+     * @param {Object} endereco - Dados de endereço do Alloy
+     * @returns {string} - Endereço formatado
+     */
+    _formatAddress(endereco) {
+        if (!endereco) return '';
         
-        await pool.execute(
-            'UPDATE deliveries SET status = "delivered" WHERE id = ?',
-            [id]
-        );
+        const parts = [];
         
-        // Adiciona notificação
-        await pool.execute(
-            'INSERT INTO notifications (delivery_id, type, message) VALUES (?, "delivered", "Entrega concluída!")',
-            [id]
-        );
+        if (endereco.logradouro) parts.push(endereco.logradouro);
+        if (endereco.numero) parts.push(endereco.numero);
+        if (endereco.complemento) parts.push(endereco.complemento);
+        if (endereco.bairro) parts.push(endereco.bairro);
+        if (endereco.cidade) parts.push(endereco.cidade);
+        if (endereco.uf) parts.push(endereco.uf);
+        if (endereco.cep) parts.push(`CEP: ${endereco.cep}`);
         
-        // Notifica via socket
-        const io = req.app.get('socketio');
-        io.emit('delivery-completed', { deliveryId: id });
-        
-        res.json({ message: 'Entrega concluída' });
-    } catch (error) {
-        console.error('Erro ao completar entrega:', error);
-        res.status(500).json({ error: error.message });
+        return parts.join(', ');
     }
-});
 
-// Deleta uma entrega
-router.delete('/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        // Verifica se a entrega existe
-        const [delivery] = await pool.execute(
-            'SELECT status FROM deliveries WHERE id = ?',
-            [id]
-        );
-        
-        if (delivery.length === 0) {
-            return res.status(404).json({ error: 'Entrega não encontrada' });
+    /**
+     * Formata a descrição do produto com base nos itens do pedido
+     * @private
+     * @param {Array} itens - Itens do pedido
+     * @returns {string} - Descrição formatada
+     */
+    _formatProductDescription(itens) {
+        if (!itens || itens.length === 0) {
+            return 'Pedido sem itens';
         }
         
-        // Deleta primeiro as notificações relacionadas
-        await pool.execute(
-            'DELETE FROM notifications WHERE delivery_id = ?',
-            [id]
-        );
-        
-        // Deleta os registros de rastreamento relacionados
-        await pool.execute(
-            'DELETE FROM tracking WHERE delivery_id = ?',
-            [id]
-        );
-        
-        // Agora deleta a entrega
-        await pool.execute(
-            'DELETE FROM deliveries WHERE id = ?',
-            [id]
-        );
-        
-        res.json({ message: 'Entrega excluída com sucesso' });
-    } catch (error) {
-        console.error('Erro ao deletar entrega:', error);
-        res.status(500).json({ error: error.message });
+        return itens.map(item => {
+            // Inclui a quantidade e o nome do item
+            const quantity = item.quantidade > 1 ? `${item.quantidade}x ` : '';
+            let description = `${quantity}${item.nome}`;
+            
+            // Adiciona complementos se existirem
+            if (item.complementos && item.complementos.length > 0) {
+                const complementosStr = item.complementos
+                    .map(c => c.nome)
+                    .join(', ');
+                description += ` (${complementosStr})`;
+            }
+            
+            return description;
+        }).join('; ');
     }
-});
 
-module.exports = router;
+    /**
+     * Determina o tamanho com base nos itens do pedido
+     * @private
+     * @param {Array} items - Itens do pedido
+     * @returns {string} - Tamanho (P, M, G, GG)
+     */
+    _determineSize(itens) {
+        if (!itens || itens.length === 0) {
+            return 'M';
+        }
+        
+        const totalItems = itens.reduce((total, item) => total + (item.quantidade || 1), 0);
+        
+        if (totalItems <= 2) return 'P';
+        if (totalItems <= 5) return 'M';
+        if (totalItems <= 10) return 'G';
+        return 'GG';
+    }
+
+    /**
+     * Determina a prioridade com base no pedido
+     * @private
+     * @param {Object} order - Pedido do Alloy
+     * @returns {number} - Prioridade (0=Normal, 1=Alta, 2=Urgente)
+     */
+    _determinePriority(order) {
+        // Se for pedido agendado, verificamos a proximidade da data
+        if (order.agendamento === 1 && order.data_agendamento) {
+            try {
+                const now = new Date();
+                const agendamentoDate = new Date(order.data_agendamento);
+                
+                // Calcula diferença em dias
+                const diffTime = agendamentoDate.getTime() - now.getTime();
+                const diffDays = diffTime / (1000 * 3600 * 24);
+                
+                // Se for para hoje ou amanhã, é urgente
+                if (diffDays <= 1) return 2;
+                
+                // Se for para depois de amanhã, é alta prioridade
+                if (diffDays <= 2) return 1;
+            } catch (error) {
+                console.error('Erro ao calcular prioridade baseada em agendamento:', error);
+            }
+        }
+        
+        // Verifica o status do pedido
+        // Status 1 = Pendente (conforme documentação)
+        if (order.status === 1) {
+            return 1; // Prioridade alta para pedidos pendentes
+        }
+        
+        // Por padrão, prioridade normal
+        return 0;
+    }
+
+    /**
+     * Formata uma string de data/hora para o formato TIME do MySQL
+     * @private
+     * @param {string} dateTimeString - String de data/hora
+     * @returns {string} - Formato HH:MM:SS
+     */
+    _formatTimeForMySQL(dateTimeString) {
+        if (!dateTimeString) return null;
+        
+        try {
+            // Se já estiver no formato HH:MM:SS, retorna diretamente
+            if (/^\d{2}:\d{2}:\d{2}$/.test(dateTimeString)) {
+                return dateTimeString;
+            }
+            
+            // Se estiver no formato HH:MM, adiciona segundos
+            if (/^\d{2}:\d{2}$/.test(dateTimeString)) {
+                return `${dateTimeString}:00`;
+            }
+            
+            // Tenta converter de ISO para formato TIME do MySQL
+            const date = new Date(dateTimeString);
+            if (isNaN(date)) return null;
+            
+            return date.toTimeString().split(' ')[0];
+        } catch (error) {
+            console.error('Erro ao formatar data:', error);
+            return null;
+        }
+    }
+}
+
+module.exports = new AlloyService();

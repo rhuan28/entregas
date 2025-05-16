@@ -19,6 +19,13 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        overflow: hidden;
+        max-height: 80px;
+        transition: max-height 0.3s ease;
+    }
+
+    .alloy-integration.expanded {
+        max-height: 300px;
     }
 
     .alloy-header {
@@ -26,12 +33,42 @@
         align-items: center;
         margin-bottom: 10px;
         gap: 15px;
+        width: 100%;
+        justify-content: space-between;
+        cursor: pointer;
+    }
+
+    .alloy-header-left {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .alloy-toggle {
+        font-size: 1.2rem;
+        transition: transform 0.3s ease;
+    }
+
+    .expanded .alloy-toggle {
+        transform: rotate(180deg);
     }
 
     .alloy-description {
         margin-bottom: 15px;
         color: #6c757d;
         text-align: center;
+    }
+
+    .alloy-content {
+        width: 100%;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease;
+    }
+
+    .expanded .alloy-content {
+        opacity: 1;
+        visibility: visible;
     }
 
     .alloy-actions {
@@ -110,6 +147,26 @@
         font-size: 11px;
         opacity: 0.8;
     }
+
+    /* Estilos para edição de entrega */
+    .edit-delivery-form {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+
+    .deliveries-section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .deliveries-section-actions {
+        display: flex;
+        gap: 10px;
+    }
     </style>
 </head>
 <body>
@@ -147,11 +204,12 @@
                     <strong id="total-time">0 min</strong>
                     <span>TEMPO EST.</span>
                 </div>
+                <div class="route-stat">
+                    <strong id="total-price">R$ 0,00</strong>
+                    <span>VALOR</span>
+                </div>
             </div>
             <div class="action-buttons">
-                <button id="clear-all" class="btn btn-danger" onclick="clearAllDeliveries()">
-                    🗑️ LIMPAR TUDO
-                </button>
                 <button id="share-route" class="btn btn-share" onclick="shareRoute()" disabled>
                     📤 COMPARTILHAR
                 </button>
@@ -166,24 +224,29 @@
         </div>
         
         <!-- Integração Alloy -->
-        <div class="alloy-integration">
-            <div class="alloy-header">
-                <h2>Integração Alloy</h2>
-                <div id="alloy-sync-badge" class="alloy-sync-badge pending">
-                    <span class="loading"></span>
-                </div>
-            </div>
-            <p class="alloy-description">Importe pedidos agendados do sistema Alloy</p>
-            <div class="alloy-actions">
-                <button id="import-alloy-btn" class="btn btn-alloy" onclick="importAlloyOrders(getRouteDate())">
-                    🔄 Importar Alloy
-                </button>
-                <div class="alloy-info">
-                    <div id="cache-info" class="alloy-cache-info" style="display:none;">
-                        Usando dados em cache
+        <div class="alloy-integration" id="alloy-section">
+            <div class="alloy-header" onclick="toggleAlloySection()">
+                <div class="alloy-header-left">
+                    <h2>Integração Alloy</h2>
+                    <div id="alloy-sync-badge" class="alloy-sync-badge pending">
+                        <span class="loading"></span>
                     </div>
-                    <div id="api-limit-info" class="alloy-api-limit-info">
-                        Limite de 1 requisição por importação
+                </div>
+                <div class="alloy-toggle">▼</div>
+            </div>
+            <div class="alloy-content">
+                <p class="alloy-description">Importe pedidos agendados do sistema Alloy</p>
+                <div class="alloy-actions">
+                    <button id="import-alloy-btn" class="btn btn-alloy" onclick="importAlloyOrders(getRouteDate())">
+                        🔄 Importar Alloy
+                    </button>
+                    <div class="alloy-info">
+                        <div id="cache-info" class="alloy-cache-info" style="display:none;">
+                            Usando dados em cache
+                        </div>
+                        <div id="api-limit-info" class="alloy-api-limit-info">
+                            Limite de 1 requisição por importação
+                        </div>
                     </div>
                 </div>
             </div>
@@ -214,16 +277,6 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>TAMANHO:</label>
-                    <select name="size">
-                        <option value="P">Pequeno</option>
-                        <option value="M" selected>Médio</option>
-                        <option value="G">Grande</option>
-                        <option value="GG">Extra Grande</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
                     <label>PRIORIDADE:</label>
                     <select name="priority">
                         <option value="0">Normal</option>
@@ -232,26 +285,65 @@
                     </select>
                 </div>
                 
-                <div class="form-group">
-                    <label>JANELA DE ENTREGA (OPCIONAL):</label>
-                    <div class="time-window">
-                        <input type="time" name="delivery_window_start">
-                        <span>até</span>
-                        <input type="time" name="delivery_window_end">
-                    </div>
-                </div>
+                <!-- Campos removidos: tamanho e janela de entrega -->
                 
                 <button type="submit" class="btn btn-primary">ADICIONAR ENTREGA</button>
             </form>
         </div>
         
+        <!-- Área de edição de entrega (inicialmente oculta) -->
+        <div id="edit-delivery-container" style="display: none;" class="form-section">
+            <h2>Editar Entrega</h2>
+            <form id="edit-delivery-form">
+                <input type="hidden" id="edit-delivery-id">
+                <div class="form-group">
+                    <label>NOME DO CLIENTE:</label>
+                    <input type="text" id="edit-customer-name" name="customer_name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>TELEFONE:</label>
+                    <input type="tel" id="edit-customer-phone" name="customer_phone" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>ENDEREÇO:</label>
+                    <input type="text" id="edit-address" name="address" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>DESCRIÇÃO DO PRODUTO:</label>
+                    <textarea id="edit-product-description" name="product_description" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>PRIORIDADE:</label>
+                    <select id="edit-priority" name="priority">
+                        <option value="0">Normal</option>
+                        <option value="1">Alta</option>
+                        <option value="2">Urgente</option>
+                    </select>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">SALVAR ALTERAÇÕES</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">CANCELAR</button>
+                </div>
+            </form>
+        </div>
+        
         <!-- Lista de Entregas -->
         <div class="deliveries-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="deliveries-section-header">
                 <h2>Entregas do Dia</h2>
-                <button onclick="addPickupStop()" class="btn btn-secondary">
-                    🏪 ADICIONAR PARADA NA CONFEITARIA
-                </button>
+                <div class="deliveries-section-actions">
+                    <button onclick="addPickupStop()" class="btn btn-secondary">
+                        🏪 ADICIONAR PARADA NA CONFEITARIA
+                    </button>
+                    <button id="clear-all" class="btn btn-danger" onclick="clearAllDeliveries()">
+                        🗑️ LIMPAR TUDO
+                    </button>
+                </div>
             </div>
             
             <div id="deliveries-list">
@@ -316,6 +408,24 @@
                         </p>
                     </div>
                 </div>
+                
+                <div class="settings-group">
+                    <h3>Configurações de Preço</h3>
+                    <div class="setting-item">
+                        <label>Valor Fixo da Diária (R$):</label>
+                        <input type="number" id="daily-rate" value="100" min="0" step="0.01" class="form-control">
+                        <p class="setting-description">
+                            Valor cobrado por dia, independente da quantidade de entregas ou distância.
+                        </p>
+                    </div>
+                    <div class="setting-item">
+                        <label>Valor por KM (R$):</label>
+                        <input type="number" id="km-rate" value="2.50" min="0" step="0.01" class="form-control">
+                        <p class="setting-description">
+                            Valor cobrado por quilômetro rodado.
+                        </p>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" onclick="saveSettings()">Salvar</button>
@@ -326,6 +436,12 @@
     
     <script src="js/routes.js"></script>
     <script>
+    // Toggle expansão do módulo Alloy
+    function toggleAlloySection() {
+        const section = document.getElementById('alloy-section');
+        section.classList.toggle('expanded');
+    }
+    
     // Contador de cliques para evitar múltiplas requisições
     let alloyRequestInProgress = false;
 
@@ -460,6 +576,65 @@
                 badge.className = 'alloy-sync-badge error';
             });
     }
+
+    // Funções para edição de entregas
+    function editDelivery(id) {
+        // Busca os dados da entrega
+        const delivery = deliveryData.find(d => d.id === id);
+        if (!delivery) return;
+        
+        // Preenche o formulário
+        document.getElementById('edit-delivery-id').value = delivery.id;
+        document.getElementById('edit-customer-name').value = delivery.customer_name;
+        document.getElementById('edit-customer-phone').value = delivery.customer_phone;
+        document.getElementById('edit-address').value = delivery.address;
+        document.getElementById('edit-product-description').value = delivery.product_description;
+        document.getElementById('edit-priority').value = delivery.priority;
+        
+        // Mostra o formulário de edição
+        document.getElementById('edit-delivery-container').style.display = 'block';
+        
+        // Rola para o formulário
+        document.getElementById('edit-delivery-container').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    function cancelEdit() {
+        document.getElementById('edit-delivery-container').style.display = 'none';
+    }
+    
+    // Adiciona evento de submit ao formulário de edição
+    document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = document.getElementById('edit-delivery-id').value;
+        const updatedDelivery = {
+            customer_name: document.getElementById('edit-customer-name').value,
+            customer_phone: document.getElementById('edit-customer-phone').value,
+            address: document.getElementById('edit-address').value,
+            product_description: document.getElementById('edit-product-description').value,
+            priority: document.getElementById('edit-priority').value
+        };
+        
+        try {
+            const response = await fetch(`${API_URL}/deliveries/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedDelivery)
+            });
+            
+            if (response.ok) {
+                showToast('Entrega atualizada com sucesso!', 'success');
+                cancelEdit();
+                loadDeliveries();
+            } else {
+                const data = await response.json();
+                throw new Error(data.error || 'Erro ao atualizar entrega');
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar entrega:', error);
+            showToast('Erro ao atualizar entrega: ' + error.message, 'error');
+        }
+    });
 
     // Ao carregar a página, verifica o status de sincronização
     document.addEventListener('DOMContentLoaded', function() {

@@ -1,4 +1,4 @@
-// routes/alloy.js - Correção para usar a data de agendamento
+// routes/alloy.js - Versão atualizada para criar rotas automaticamente
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
@@ -20,6 +20,7 @@ const pool = mysql.createPool({
  * Importa pedidos do Alloy para uma data específica
  * Faz apenas uma requisição à API e maximiza seu uso
  * Importa pedidos para a data CORRETA de agendamento, não a data da rota
+ * Cria automaticamente uma entrada na tabela de rotas para cada data que recebe pedidos
  * POST /api/alloy/import
  */
 router.post('/import', async (req, res) => {
@@ -128,6 +129,9 @@ router.post('/import', async (req, res) => {
                             JSON.stringify(order) // Armazena os dados brutos do pedido para referência futura
                         ]
                     );
+                    
+                    // Cria entrada na tabela de rotas para esta data, se necessário
+                    await createRouteEntryIfNeeded(connection, delivery.order_date);
                     
                     // Registra a importação
                     importedIds.add(order.ref);
@@ -310,5 +314,32 @@ router.get('/order/:ref', async (req, res) => {
         });
     }
 });
+
+/**
+ * Cria uma entrada na tabela de rotas para uma data específica, se necessário
+ * @param {Object} connection - Conexão MySQL
+ * @param {string} date - Data no formato YYYY-MM-DD
+ */
+async function createRouteEntryIfNeeded(connection, date) {
+    try {
+        // Verifica se já existe uma rota para esta data
+        const [existingRoute] = await connection.execute(
+            'SELECT id FROM routes WHERE route_date = ?',
+            [date]
+        );
+        
+        // Se não existe, cria uma nova entrada
+        if (existingRoute.length === 0) {
+            await connection.execute(
+                'INSERT INTO routes (route_date, status) VALUES (?, "planned")',
+                [date]
+            );
+            console.log(`Criada nova entrada de rota para a data ${date}`);
+        }
+    } catch (error) {
+        console.error('Erro ao criar entrada de rota:', error);
+        throw error;
+    }
+}
 
 module.exports = router;
