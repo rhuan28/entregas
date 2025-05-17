@@ -40,6 +40,14 @@ router.put('/:key', async (req, res) => {
         const { key } = req.params;
         const { value } = req.body;
         
+        // Validação para campos numéricos
+        if (key === 'daily_rate' || key === 'km_rate') {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue) || numValue < 0) {
+                return res.status(400).json({ error: 'Valor inválido para configuração de preço' });
+            }
+        }
+        
         await pool.execute(
             'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
             [key, value, value]
@@ -62,6 +70,12 @@ router.post('/bulk', async (req, res) => {
         const settings = req.body;
         
         for (const [key, value] of Object.entries(settings)) {
+            // Validação para campos numéricos
+            if ((key === 'daily_rate' || key === 'km_rate') && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) {
+                await connection.rollback();
+                return res.status(400).json({ error: `Valor inválido para configuração de preço: ${key}` });
+            }
+            
             await connection.execute(
                 'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
                 [key, value, value]

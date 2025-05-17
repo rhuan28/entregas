@@ -7,6 +7,29 @@
     <link rel="stylesheet" href="css/styles.css">
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyByMhUX-axD8w4HmmcPVUs7WNFsZDVLy64&libraries=places"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+    /* Estilos removidos da integração Alloy */
+
+    /* Estilos para edição de entrega */
+    .edit-delivery-form {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+
+    .deliveries-section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .deliveries-section-actions {
+        display: flex;
+        gap: 10px;
+    }
+    </style>
 </head>
 <body>
     <!-- Navbar -->
@@ -43,11 +66,12 @@
                     <strong id="total-time">0 min</strong>
                     <span>TEMPO EST.</span>
                 </div>
+                <div class="route-stat">
+                    <strong id="total-price">R$ 0,00</strong>
+                    <span>VALOR</span>
+                </div>
             </div>
             <div class="action-buttons">
-                <button id="clear-all" class="btn btn-danger" onclick="clearAllDeliveries()">
-                    🗑️ LIMPAR TUDO
-                </button>
                 <button id="share-route" class="btn btn-share" onclick="shareRoute()" disabled>
                     📤 COMPARTILHAR
                 </button>
@@ -60,6 +84,8 @@
                 ⚙️ CONFIGURAÇÕES
             </button>
         </div>
+        
+        <!-- Espaço removido da integração Alloy -->
         
         <!-- Formulário de Nova Entrega -->
         <div class="form-section">
@@ -86,16 +112,6 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>TAMANHO:</label>
-                    <select name="size">
-                        <option value="P">Pequeno</option>
-                        <option value="M" selected>Médio</option>
-                        <option value="G">Grande</option>
-                        <option value="GG">Extra Grande</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
                     <label>PRIORIDADE:</label>
                     <select name="priority">
                         <option value="0">Normal</option>
@@ -104,26 +120,63 @@
                     </select>
                 </div>
                 
+                <button type="submit" class="btn btn-primary">ADICIONAR ENTREGA</button>
+            </form>
+        </div>
+        
+        <!-- Área de edição de entrega (inicialmente oculta) -->
+        <div id="edit-delivery-container" style="display: none;" class="form-section">
+            <h2>Editar Entrega</h2>
+            <form id="edit-delivery-form">
+                <input type="hidden" id="edit-delivery-id">
                 <div class="form-group">
-                    <label>JANELA DE ENTREGA (OPCIONAL):</label>
-                    <div class="time-window">
-                        <input type="time" name="delivery_window_start">
-                        <span>até</span>
-                        <input type="time" name="delivery_window_end">
-                    </div>
+                    <label>NOME DO CLIENTE:</label>
+                    <input type="text" id="edit-customer-name" name="customer_name" required>
                 </div>
                 
-                <button type="submit" class="btn btn-primary">ADICIONAR ENTREGA</button>
+                <div class="form-group">
+                    <label>TELEFONE:</label>
+                    <input type="tel" id="edit-customer-phone" name="customer_phone" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>ENDEREÇO:</label>
+                    <input type="text" id="edit-address" name="address" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>DESCRIÇÃO DO PRODUTO:</label>
+                    <textarea id="edit-product-description" name="product_description" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>PRIORIDADE:</label>
+                    <select id="edit-priority" name="priority">
+                        <option value="0">Normal</option>
+                        <option value="1">Alta</option>
+                        <option value="2">Urgente</option>
+                    </select>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">SALVAR ALTERAÇÕES</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">CANCELAR</button>
+                </div>
             </form>
         </div>
         
         <!-- Lista de Entregas -->
         <div class="deliveries-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="deliveries-section-header">
                 <h2>Entregas do Dia</h2>
-                <button onclick="addPickupStop()" class="btn btn-secondary">
-                    🏪 ADICIONAR PARADA NA CONFEITARIA
-                </button>
+                <div class="deliveries-section-actions">
+                    <button id="clear-all" class="btn btn-danger" onclick="clearAllDeliveries()">
+                        🗑️ LIMPAR TUDO
+                    </button>
+                    <button onclick="addPickupStop()" class="btn btn-secondary">
+                        🏪 ADICIONAR PARADA NA CONFEITARIA
+                    </button>
+                </div>
             </div>
             
             <div id="deliveries-list">
@@ -188,6 +241,24 @@
                         </p>
                     </div>
                 </div>
+                
+                <div class="settings-group">
+                    <h3>Configurações de Preço</h3>
+                    <div class="setting-item">
+                        <label>Valor Fixo da Diária (R$):</label>
+                        <input type="number" id="daily-rate" value="100" min="0" step="0.01" class="form-control">
+                        <p class="setting-description">
+                            Valor cobrado por dia, independente da quantidade de entregas ou distância.
+                        </p>
+                    </div>
+                    <div class="setting-item">
+                        <label>Valor por KM (R$):</label>
+                        <input type="number" id="km-rate" value="2.50" min="0" step="0.01" class="form-control">
+                        <p class="setting-description">
+                            Valor cobrado por quilômetro rodado.
+                        </p>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" onclick="saveSettings()">Salvar</button>
@@ -197,5 +268,335 @@
     </div>
     
     <script src="js/routes.js"></script>
+    <script>
+    // Código JS atualizado, removida integração com Alloy
+    // Adicionando as configurações padrão de preço ao objeto settings global
+    settings = {
+        ...settings,
+        daily_rate: '100',
+        km_rate: '2.50'
+    };
+
+    // Funções para edição de entregas
+    function editDelivery(id) {
+        // Busca os dados da entrega
+        const delivery = deliveryData.find(d => d.id === id);
+        if (!delivery) return;
+        
+        // Preenche o formulário
+        document.getElementById('edit-delivery-id').value = delivery.id;
+        document.getElementById('edit-customer-name').value = delivery.customer_name;
+        document.getElementById('edit-customer-phone').value = delivery.customer_phone;
+        document.getElementById('edit-address').value = delivery.address;
+        document.getElementById('edit-product-description').value = delivery.product_description;
+        document.getElementById('edit-priority').value = delivery.priority;
+        
+        // Mostra o formulário de edição
+        document.getElementById('edit-delivery-container').style.display = 'block';
+        
+        // Rola para o formulário
+        document.getElementById('edit-delivery-container').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    function cancelEdit() {
+        document.getElementById('edit-delivery-container').style.display = 'none';
+    }
+    
+    // Adiciona evento de submit ao formulário de edição
+    document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = document.getElementById('edit-delivery-id').value;
+        const updatedDelivery = {
+            customer_name: document.getElementById('edit-customer-name').value,
+            customer_phone: document.getElementById('edit-customer-phone').value,
+            address: document.getElementById('edit-address').value,
+            product_description: document.getElementById('edit-product-description').value,
+            priority: document.getElementById('edit-priority').value
+        };
+        
+        try {
+            const response = await fetch(`${API_URL}/deliveries/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedDelivery)
+            });
+            
+            if (response.ok) {
+                showToast('Entrega atualizada com sucesso!', 'success');
+                cancelEdit();
+                loadDeliveries();
+            } else {
+                const data = await response.json();
+                throw new Error(data.error || 'Erro ao atualizar entrega');
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar entrega:', error);
+            showToast('Erro ao atualizar entrega: ' + error.message, 'error');
+        }
+    });
+    
+    // Sobrescrever a função updateRouteStats para incluir cálculo de preço
+    const originalUpdateRouteStats = updateRouteStats;
+    updateRouteStats = function() {
+        document.getElementById('total-deliveries').textContent = deliveryData.length;
+        
+        if (currentRoute) {
+            const distanceKm = (currentRoute.totalDistance / 1000).toFixed(1);
+            const totalMinutes = Math.round(currentRoute.totalDuration / 60);
+            const stopTime = parseInt(settings.stop_time) || 8;
+            const totalStops = deliveryData.length + pickupStops.length;
+            const totalTimeWithStops = totalMinutes + (totalStops * stopTime);
+            
+            // Calcula o preço total
+            const dailyRate = parseFloat(settings.daily_rate || 100);
+            const kmRate = parseFloat(settings.km_rate || 2.5);
+            const totalPrice = dailyRate + (distanceKm * kmRate);
+            
+            document.getElementById('total-distance').textContent = `${distanceKm} km`;
+            document.getElementById('total-time').textContent = `${totalTimeWithStops} min`;
+            document.getElementById('total-price').textContent = `R$ ${totalPrice.toFixed(2)}`;
+            document.getElementById('share-route').disabled = false;
+        } else {
+            document.getElementById('total-distance').textContent = '0 km';
+            document.getElementById('total-time').textContent = '0 min';
+            document.getElementById('total-price').textContent = 'R$ 0,00';
+            document.getElementById('share-route').disabled = true;
+        }
+    };
+    
+    // Sobrescrever a função loadSettings para incluir configurações de preço
+    const originalLoadSettings = loadSettings;
+    loadSettings = async function() {
+        try {
+            const response = await fetch(`${API_URL}/settings`);
+            const data = await response.json();
+            
+            settings = { ...settings, ...data };
+            
+            document.getElementById('circular-route').checked = settings.circular_route === 'true';
+            document.getElementById('origin-address').value = settings.origin_address || 'R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030';
+            document.getElementById('stop-time').value = settings.stop_time || '8';
+            document.getElementById('daily-rate').value = settings.daily_rate || '100';
+            document.getElementById('km-rate').value = settings.km_rate || '2.50';
+        } catch (error) {
+            console.error('Erro ao carregar configurações:', error);
+        }
+    };
+    
+    // Sobrescreve a função saveSettings para incluir configurações de preço
+    const originalSaveSettings = saveSettings;
+    saveSettings = async function() {
+        const circularRoute = document.getElementById('circular-route').checked;
+        const originAddress = document.getElementById('origin-address').value;
+        const stopTime = document.getElementById('stop-time').value;
+        const dailyRate = document.getElementById('daily-rate').value;
+        const kmRate = document.getElementById('km-rate').value;
+        
+        const newSettings = {
+            circular_route: circularRoute ? 'true' : 'false',
+            origin_address: originAddress,
+            stop_time: stopTime,
+            daily_rate: dailyRate,
+            km_rate: kmRate
+        };
+        
+        try {
+            const response = await fetch(`${API_URL}/settings/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newSettings)
+            });
+            
+            if (response.ok) {
+                settings = { ...settings, ...newSettings };
+                showToast('Configurações salvas com sucesso!', 'success');
+                closeSettings();
+                updateRouteStats();
+            }
+        } catch (error) {
+            console.error('Erro ao salvar configurações:', error);
+            showToast('Erro ao salvar configurações', 'error');
+        }
+    };
+    
+    // Sobrescreve a função para exibir cada entrega, adicionando o botão de edição
+    const originalLoadDeliveries = loadDeliveries;
+    loadDeliveries = async function() {
+        try {
+            const routeDate = getRouteDate();
+            const response = await fetch(`${API_URL}/deliveries?date=${routeDate}`);
+            const deliveries = await response.json();
+            
+            deliveryData = deliveries;
+            
+            const listElement = document.getElementById('deliveries-list');
+            listElement.innerHTML = '';
+            
+            // Combina entregas e paradas em uma única lista
+            const allItems = [];
+            
+            // Adiciona entregas
+            deliveries.forEach(delivery => {
+                allItems.push({
+                    ...delivery,
+                    type: 'delivery'
+                });
+            });
+            
+            // Adiciona paradas na confeitaria
+            pickupStops.forEach((stop, index) => {
+                allItems.push({
+                    ...stop,
+                    type: 'pickup',
+                    id: stop.id || `pickup_${index}`,
+                    customer_name: 'Confeitaria',
+                    product_description: 'Recarregar produtos',
+                    priority: stop.priority || 0
+                });
+            });
+            
+            // Ordena pelo manual order se existir
+            allItems.sort((a, b) => {
+                const orderA = manualOrder[a.id] || 999;
+                const orderB = manualOrder[b.id] || 999;
+                return orderA - orderB;
+            });
+            
+            // Renderiza todos os itens
+            allItems.forEach((item, index) => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'delivery-item draggable';
+                itemElement.draggable = true;
+                itemElement.dataset.itemId = item.id;
+                itemElement.dataset.itemType = item.type;
+                
+                if (item.type === 'pickup') {
+                    itemElement.classList.add('pickup-stop');
+                    itemElement.innerHTML = `
+                        <div class="delivery-header">
+                            <h3>🏪 Parada na Confeitaria</h3>
+                            <span class="priority priority-0">Parada</span>
+                        </div>
+                        <p><strong>📍</strong> ${item.address || settings.origin_address}</p>
+                        <p><strong>📦</strong> Recarregar produtos</p>
+                        <div class="delivery-actions">
+                            <div class="manual-order">
+                                <label>Ordem:</label>
+                                <input type="number" 
+                                       class="order-input" 
+                                       value="${manualOrder[item.id] || ''}" 
+                                       min="1"
+                                       onchange="updateManualOrder('${item.id}', this.value)">
+                            </div>
+                            <button onclick="removePickupStop('${item.id}')" class="btn btn-danger btn-sm">
+                                Remover
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    itemElement.innerHTML = `
+                        <div class="delivery-header">
+                            <h3>${item.customer_name}</h3>
+                            <span class="priority priority-${item.priority}">${getPriorityLabel(item.priority)}</span>
+                        </div>
+                        <p><strong>📍</strong> ${item.address}</p>
+                        <p><strong>📦</strong> ${item.product_description} - ${getSizeLabel(item.size)}</p>
+                        ${item.customer_phone ? `<p><strong>📞</strong> ${item.customer_phone}</p>` : ''}
+                        <div class="delivery-actions">
+                            <div class="manual-order">
+                                <label>Ordem:</label>
+                                <input type="number" 
+                                       class="order-input" 
+                                       value="${manualOrder[item.id] || ''}" 
+                                       min="1"
+                                       onchange="updateManualOrder(${item.id}, this.value)">
+                            </div>
+                            <button onclick="editDelivery(${item.id})" class="btn btn-secondary btn-sm">
+                                ✏️ Editar
+                            </button>
+                            <button onclick="showDeliveryOnMap(${item.lat}, ${item.lng})" class="btn btn-secondary btn-sm">
+                                Ver no Mapa
+                            </button>
+                            <button onclick="generateTrackingLink(${item.id})" class="btn btn-info btn-sm">
+                                Link
+                            </button>
+                            ${item.status === 'in_transit' ? 
+                                `<button onclick="completeDelivery(${item.id})" class="btn btn-success btn-sm">
+                                    Entregar
+                                </button>` : ''}
+                            <button onclick="deleteDelivery(${item.id}, '${item.status}')" class="btn btn-danger btn-sm">
+                                Excluir
+                            </button>
+                        </div>
+                        <span class="status status-${item.status}">${getStatusLabel(item.status)}</span>
+                    `;
+                }
+                
+                // Adiciona eventos de drag and drop
+                itemElement.addEventListener('dragstart', handleDragStart);
+                itemElement.addEventListener('dragend', handleDragEnd);
+                itemElement.addEventListener('dragover', handleDragOver);
+                itemElement.addEventListener('drop', handleDrop);
+                itemElement.addEventListener('dragleave', handleDragLeave);
+                
+                listElement.appendChild(itemElement);
+            });
+            
+            // Atualiza estatísticas
+            updateRouteStats();
+            
+            // Adiciona marcadores no mapa
+            clearMarkers();
+            allItems.forEach((item, index) => {
+                const marker = new google.maps.Marker({
+                    position: { lat: parseFloat(item.lat), lng: parseFloat(item.lng) },
+                    map: map,
+                    title: item.type === 'pickup' ? 'Parada na Confeitaria' : item.customer_name,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(item.priority),
+                        fillOpacity: 0.8,
+                        strokeColor: 'white',
+                        strokeWeight: 2
+                    },
+                    label: {
+                        text: (index + 1).toString(),
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                    },
+                    zIndex: 100 + index
+                });
+                
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="padding: 10px;">
+                            <h4>${item.type === 'pickup' ? '🏪 Parada na Confeitaria' : item.customer_name}</h4>
+                            <p>${item.address || settings.origin_address}</p>
+                            <p><strong>${item.product_description}</strong></p>
+                            ${item.type !== 'pickup' ? `<p>Prioridade: ${getPriorityLabel(item.priority)}</p>` : ''}
+                        </div>
+                    `
+                });
+                
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+                
+                markers.push(marker);
+            });
+        } catch (error) {
+            console.error('Erro ao carregar entregas:', error);
+            showToast('Erro ao carregar entregas', 'error');
+        }
+    };
+    
+    // Ao carregar a página
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicialização padrão
+    });
+    </script>
 </body>
 </html>

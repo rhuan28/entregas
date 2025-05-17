@@ -1,4 +1,4 @@
-// js/routes.js - Sistema completo de rotas (REVISADO)
+// js/routes.js - Sistema completo de rotas (ATUALIZADO)
 const API_URL = 'http://localhost:3000/api';
 const socket = io('http://localhost:3000');
 
@@ -10,11 +10,108 @@ let currentRoute = null;
 let driverMarker = null;
 let deliveryData = [];
 let pickupStops = [];
-let manualOrder = {};
+let manualOrder = {}
+
+// Sistema de Toast
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
+
+// Inicia rota
+document.getElementById('start-route').addEventListener('click', async () => {
+    if (!currentRoute) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/deliveries/routes/${currentRoute.routeId}/start`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast('Rota iniciada! Rastreamento ativado.', 'success');
+            document.getElementById('track-driver').disabled = false;
+        }
+    } catch (error) {
+        console.error('Erro ao iniciar rota:', error);
+        showToast('Erro ao iniciar rota', 'error');
+    }
+});
+
+// Inicialização
+window.onload = () => {
+    // Define a data da rota
+    const routeDate = getRouteDate();
+    const dateObj = new Date(routeDate + 'T00:00:00');
+    const formattedDate = dateObj.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    document.getElementById('route-date').textContent = formattedDate;
+    
+    initMap();
+    loadDeliveries();
+    loadSettings();
+    
+    // Configura autocomplete para endereço
+    const autocomplete = new google.maps.places.Autocomplete(
+        document.getElementById('address-input'),
+        { 
+            types: ['address'],
+            componentRestrictions: { country: 'br' }
+        }
+    );
+    
+    autocomplete.addListener('place_changed', function() {
+        const place = autocomplete.getPlace();
+        if (place.geometry) {
+            document.getElementById('address-input').value = place.formatted_address;
+        }
+    });
+};
+
+// Socket.io listeners
+socket.on('location-update', (data) => {
+    if (driverMarker) {
+        driverMarker.setPosition({ lat: data.lat, lng: data.lng });
+    }
+});
+
+socket.on('delivery-completed', (data) => {
+    loadDeliveries();
+});
+
+socket.on('delivery-approaching', (data) => {
+    showToast('Entregador se aproximando!', 'info');
+});
+
+// Fecha modal ao clicar fora dele
+window.onclick = function(event) {
+    const modal = document.getElementById('settings-modal');
+    if (event.target == modal) {
+        closeSettings();
+    }
+};
 let settings = {
     circular_route: 'true',
     origin_address: 'R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030',
-    stop_time: '8'
+    stop_time: '8',
+    daily_rate: '100',   // Valor padrão da diária
+    km_rate: '2.50'      // Valor padrão por km
 };
 
 // Obtém data da URL
@@ -156,6 +253,9 @@ async function loadDeliveries() {
                                    min="1"
                                    onchange="updateManualOrder(${item.id}, this.value)">
                         </div>
+                        <button onclick="editDelivery(${item.id})" class="btn btn-secondary btn-sm">
+                            ✏️ Editar
+                        </button>
                         <button onclick="showDeliveryOnMap(${item.lat}, ${item.lng})" class="btn btn-secondary btn-sm">
                             Ver no Mapa
                         </button>
@@ -234,6 +334,32 @@ async function loadDeliveries() {
     }
 }
 
+// Função para editar uma entrega existente
+function editDelivery(id) {
+    // Busca os dados da entrega
+    const delivery = deliveryData.find(d => d.id === id);
+    if (!delivery) return;
+    
+    // Preenche o formulário
+    document.getElementById('edit-delivery-id').value = delivery.id;
+    document.getElementById('edit-customer-name').value = delivery.customer_name;
+    document.getElementById('edit-customer-phone').value = delivery.customer_phone;
+    document.getElementById('edit-address').value = delivery.address;
+    document.getElementById('edit-product-description').value = delivery.product_description;
+    document.getElementById('edit-priority').value = delivery.priority;
+    
+    // Mostra o formulário de edição
+    document.getElementById('edit-delivery-container').style.display = 'block';
+    
+    // Rola para o formulário
+    document.getElementById('edit-delivery-container').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Função para cancelar a edição
+function cancelEdit() {
+    document.getElementById('edit-delivery-container').style.display = 'none';
+}
+
 // Atualiza ordem manual
 function updateManualOrder(itemId, order) {
     if (order === '' || order < 1) {
@@ -274,12 +400,19 @@ function updateRouteStats() {
         const totalStops = deliveryData.length + pickupStops.length;
         const totalTimeWithStops = totalMinutes + (totalStops * stopTime);
         
+        // Calcula o preço total
+        const dailyRate = parseFloat(settings.daily_rate || 100);
+        const kmRate = parseFloat(settings.km_rate || 2.5);
+        const totalPrice = dailyRate + (distanceKm * kmRate);
+        
         document.getElementById('total-distance').textContent = `${distanceKm} km`;
         document.getElementById('total-time').textContent = `${totalTimeWithStops} min`;
+        document.getElementById('total-price').textContent = `R$ ${totalPrice.toFixed(2)}`;
         document.getElementById('share-route').disabled = false;
     } else {
         document.getElementById('total-distance').textContent = '0 km';
         document.getElementById('total-time').textContent = '0 min';
+        document.getElementById('total-price').textContent = 'R$ 0,00';
         document.getElementById('share-route').disabled = true;
     }
 }
@@ -311,6 +444,7 @@ async function clearAllDeliveries() {
 }
 
 // Compartilha rota no Google Maps
+// Compartilha rota no Google Maps
 function shareRoute() {
     if (!currentRoute || !currentRoute.optimizedOrder) {
         showToast('Primeiro otimize a rota para compartilhar', 'info');
@@ -331,14 +465,18 @@ function shareRoute() {
     } else {
         // Fallback para usar optimizedOrder
         currentRoute.optimizedOrder.forEach(item => {
-            const delivery = deliveryData.find(d => 
-                d.id === item.deliveryId || 
-                d.id === parseInt(item.shipmentId?.replace('entrega_', ''))
-            );
-            if (delivery && delivery.address) {
-                url += `${encodeURIComponent(delivery.address)}/`;
-            } else if (item.type === 'pickup') {
+            // Verifica se é uma parada na confeitaria
+            if (item.type === 'pickup' || item.shipmentId?.startsWith('pickup_')) {
                 url += `${encodeURIComponent(settings.origin_address)}/`;
+            } else {
+                // É uma entrega normal
+                const delivery = deliveryData.find(d => 
+                    d.id === item.deliveryId || 
+                    d.id === parseInt(item.shipmentId?.replace('entrega_', ''))
+                );
+                if (delivery && delivery.address) {
+                    url += `${encodeURIComponent(delivery.address)}/`;
+                }
             }
         });
     }
@@ -376,6 +514,40 @@ document.getElementById('delivery-form').addEventListener('submit', async (e) =>
     } catch (error) {
         console.error('Erro ao adicionar entrega:', error);
         showToast('Erro ao adicionar entrega', 'error');
+    }
+});
+
+// Adiciona evento de submit ao formulário de edição
+document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('edit-delivery-id').value;
+    const updatedDelivery = {
+        customer_name: document.getElementById('edit-customer-name').value,
+        customer_phone: document.getElementById('edit-customer-phone').value,
+        address: document.getElementById('edit-address').value,
+        product_description: document.getElementById('edit-product-description').value,
+        priority: document.getElementById('edit-priority').value
+    };
+    
+    try {
+        const response = await fetch(`${API_URL}/deliveries/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedDelivery)
+        });
+        
+        if (response.ok) {
+            showToast('Entrega atualizada com sucesso!', 'success');
+            cancelEdit();
+            loadDeliveries();
+        } else {
+            const data = await response.json();
+            throw new Error(data.error || 'Erro ao atualizar entrega');
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar entrega:', error);
+        showToast('Erro ao atualizar entrega: ' + error.message, 'error');
     }
 });
 
@@ -445,21 +617,18 @@ function showOptimizedRoute(route) {
     const allStops = [];
     
     route.optimizedOrder.forEach((item, index) => {
-        // Procura em todas as paradas (deliveries + pickups)
-        let stop = deliveryData.find(d => d.id === item.deliveryId || d.id === item.id);
-        
-        if (!stop) {
-            stop = pickupStops.find(p => p.id === item.deliveryId || p.id === item.id);
-            if (stop) {
-                stop = {
-                    ...stop,
-                    customer_name: 'Confeitaria',
-                    product_description: 'Recarregar produtos'
-                };
-            }
-        }
-        
-        if (stop) {
+        // Verifica se é uma parada na confeitaria (tipo pickup)
+        if (item.type === 'pickup' || item.shipmentId?.startsWith('pickup_')) {
+            const stop = {
+                id: item.id || item.deliveryId || item.shipmentId,
+                lat: settings.origin_address === CONFEITARIA_ADDRESS ? -22.894334936369436 : parseFloat(item.lat),
+                lng: settings.origin_address === CONFEITARIA_ADDRESS ? -47.0640515913573 : parseFloat(item.lng),
+                address: settings.origin_address,
+                type: 'pickup',
+                customer_name: 'Confeitaria',
+                product_description: 'Recarregar produtos'
+            };
+            
             orderedDeliveries.push({
                 location: stop.address,
                 stopover: true
@@ -468,10 +637,24 @@ function showOptimizedRoute(route) {
                 ...stop,
                 index: index
             });
+        } else {
+            // É uma entrega normal
+            let stop = deliveryData.find(d => d.id === item.deliveryId || d.id === item.id);
+            
+            if (stop) {
+                orderedDeliveries.push({
+                    location: stop.address,
+                    stopover: true
+                });
+                allStops.push({
+                    ...stop,
+                    index: index
+                });
+            }
         }
     });
     
-    if (orderedDeliveries.length === 0) {
+   if (orderedDeliveries.length === 0) {
         console.error('Nenhuma parada encontrada para a rota');
         return;
     }
@@ -716,6 +899,8 @@ async function loadSettings() {
         document.getElementById('circular-route').checked = settings.circular_route === 'true';
         document.getElementById('origin-address').value = settings.origin_address;
         document.getElementById('stop-time').value = settings.stop_time || '8';
+        document.getElementById('daily-rate').value = settings.daily_rate || '100';
+        document.getElementById('km-rate').value = settings.km_rate || '2.50';
     } catch (error) {
         console.error('Erro ao carregar configurações:', error);
     }
@@ -733,11 +918,15 @@ async function saveSettings() {
     const circularRoute = document.getElementById('circular-route').checked;
     const originAddress = document.getElementById('origin-address').value;
     const stopTime = document.getElementById('stop-time').value;
+    const dailyRate = document.getElementById('daily-rate').value;
+    const kmRate = document.getElementById('km-rate').value;
     
     const newSettings = {
         circular_route: circularRoute ? 'true' : 'false',
         origin_address: originAddress,
-        stop_time: stopTime
+        stop_time: stopTime,
+        daily_rate: dailyRate,
+        km_rate: kmRate
     };
     
     try {
@@ -753,103 +942,8 @@ async function saveSettings() {
             closeSettings();
             updateRouteStats();
         }
-    } catch (error) {
+} catch (error) {
         console.error('Erro ao salvar configurações:', error);
         showToast('Erro ao salvar configurações', 'error');
-    }
-}
-
-// Sistema de Toast
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `
-        <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-        <span>${message}</span>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
-    }, 3000);
-}
-
-// Inicia rota
-document.getElementById('start-route').addEventListener('click', async () => {
-    if (!currentRoute) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/deliveries/routes/${currentRoute.routeId}/start`, {
-            method: 'POST'
-        });
-        
-        if (response.ok) {
-            showToast('Rota iniciada! Rastreamento ativado.', 'success');
-            document.getElementById('track-driver').disabled = false;
-        }
-    } catch (error) {
-        console.error('Erro ao iniciar rota:', error);
-        showToast('Erro ao iniciar rota', 'error');
-    }
-});
-
-// Inicialização
-window.onload = () => {
-    // Define a data da rota
-    const routeDate = getRouteDate();
-    const dateObj = new Date(routeDate + 'T00:00:00');
-    const formattedDate = dateObj.toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
-    document.getElementById('route-date').textContent = formattedDate;
-    
-    initMap();
-    loadDeliveries();
-    loadSettings();
-    
-    // Configura autocomplete para endereço
-    const autocomplete = new google.maps.places.Autocomplete(
-        document.getElementById('address-input'),
-        { 
-            types: ['address'],
-            componentRestrictions: { country: 'br' }
-        }
-    );
-    
-    autocomplete.addListener('place_changed', function() {
-        const place = autocomplete.getPlace();
-        if (place.geometry) {
-            document.getElementById('address-input').value = place.formatted_address;
-        }
-    });
-};
-
-// Socket.io listeners
-socket.on('location-update', (data) => {
-    if (driverMarker) {
-        driverMarker.setPosition({ lat: data.lat, lng: data.lng });
-    }
-});
-
-socket.on('delivery-completed', (data) => {
-    loadDeliveries();
-});
-
-socket.on('delivery-approaching', (data) => {
-    showToast('Entregador se aproximando!', 'info');
-});
-
-// Fecha modal ao clicar fora dele
-window.onclick = function(event) {
-    const modal = document.getElementById('settings-modal');
-    if (event.target == modal) {
-        closeSettings();
     }
 }

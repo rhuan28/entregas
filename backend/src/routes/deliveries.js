@@ -385,4 +385,79 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// Atualiza uma entrega
+router.put('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { 
+            customer_name, 
+            customer_phone, 
+            address, 
+            product_description, 
+            priority 
+        } = req.body;
+        
+        // Verifica se a entrega existe
+        const [delivery] = await pool.execute(
+            'SELECT * FROM deliveries WHERE id = ?',
+            [id]
+        );
+        
+        if (delivery.length === 0) {
+            return res.status(404).json({ error: 'Entrega não encontrada' });
+        }
+        
+        // Se o endereço foi alterado, precisamos geocodificar novamente
+        let lat = delivery[0].lat;
+        let lng = delivery[0].lng;
+        let formatted_address = delivery[0].address;
+        
+        if (address && address !== delivery[0].address) {
+            try {
+                const coords = await googleMaps.geocodeAddress(address);
+                lat = coords.lat;
+                lng = coords.lng;
+                formatted_address = coords.formatted_address;
+            } catch (error) {
+                console.error('Erro ao geocodificar endereço:', error);
+                return res.status(400).json({ error: 'Não foi possível geocodificar o endereço fornecido' });
+            }
+        }
+        
+        // Atualiza a entrega
+        await pool.execute(
+            `UPDATE deliveries SET 
+                customer_name = ?, 
+                customer_phone = ?, 
+                address = ?, 
+                lat = ?, 
+                lng = ?, 
+                product_description = ?, 
+                priority = ?
+            WHERE id = ?`,
+            [
+                customer_name || delivery[0].customer_name,
+                customer_phone || delivery[0].customer_phone,
+                formatted_address,
+                lat,
+                lng,
+                product_description || delivery[0].product_description,
+                priority !== undefined ? priority : delivery[0].priority,
+                id
+            ]
+        );
+        
+        // Retorna a entrega atualizada
+        const [updatedDelivery] = await pool.execute(
+            'SELECT * FROM deliveries WHERE id = ?',
+            [id]
+        );
+        
+        res.json(updatedDelivery[0]);
+    } catch (error) {
+        console.error('Erro ao atualizar entrega:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
