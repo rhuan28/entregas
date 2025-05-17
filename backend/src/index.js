@@ -1,4 +1,4 @@
-// Modificação do arquivo index.js
+// src/index.js - Backend principal
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -9,7 +9,6 @@ require('dotenv').config();
 const deliveriesRouter = require('./routes/deliveries');
 const trackingRouter = require('./routes/tracking');
 const settingsRouter = require('./routes/settings');
-const alloyRouter = require('./routes/alloy'); // Nova rota para o Alloy
 
 const app = express();
 const server = http.createServer(app);
@@ -92,7 +91,6 @@ app.get('/api/routes', async (req, res) => {
 app.use('/api/deliveries', deliveriesRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/alloy', alloyRouter); // Nova rota do Alloy
 
 // Socket.io para rastreamento em tempo real
 io.on('connection', (socket) => {
