@@ -1,4 +1,4 @@
-// alloyService.js - Correção para a data de agendamento
+// alloyService.js - FIXED VERSION
 const axios = require('axios');
 require('dotenv').config();
 
@@ -6,12 +6,16 @@ require('dotenv').config();
  * Serviço para comunicação com a API Alloy
  * Otimizado para realizar uma única requisição por vez
  * Com correção para usar a data de agendamento correta
+ * Com validação de endereço aprimorada
  */
 class AlloyService {
     constructor() {
         // Token fornecido pelo usuário
         this.token = '682643ed92d4c';
         this.baseURL = 'https://api.alloy.al/api';
+        
+        // Token de desenvolvedor/integrador 
+        this.integradorToken = 'f22fd441-6446-4b28-b83d-3a2e1b1b4676';
         
         // Armazena dados em cache para evitar múltiplas requisições
         this.cachedOrders = null;
@@ -58,9 +62,11 @@ class AlloyService {
             console.log(`Fazendo requisição única à API Alloy: ${url}`);
             
             // Faz a requisição com o formato correto de autenticação
+            // Inclui o token de desenvolvedor adicional no cabeçalho
             const response = await axios.get(url, {
                 headers: {
-                    'Authorization': `Bearer ${this.token}`
+                    'Authorization': `Bearer ${this.token}`,
+                    'integrador-token': this.integradorToken
                 },
                 timeout: 15000 // 15 segundos de timeout
             });
@@ -119,6 +125,11 @@ class AlloyService {
         // Extrai os dados do endereço - usando endereco_de_entrega
         const address = this._formatAddress(order.endereco_de_entrega);
         
+        // Validação de endereço
+        if (!address || address.trim() === '') {
+            throw new Error(`Endereço inválido para pedido ${order.ref}`);
+        }
+        
         // Usa a data de agendamento correta em vez da data atual
         // Isso garante que o pedido seja importado para a data correta
         let orderDate = new Date().toISOString().split('T')[0]; // Padrão: data atual
@@ -165,11 +176,16 @@ class AlloyService {
         // Cria descrição do produto a partir dos itens
         const productDescription = this._formatProductDescription(order.itens);
 
+        // Valida se temos um nome de cliente válido
+        const customerName = order.usuario && order.usuario.nome 
+            ? `${order.usuario.nome} ${order.usuario.sobrenome || ''}`.trim()
+            : 'Cliente sem nome';
+
         return {
             external_order_id: `alloy_${order.ref}`,
             order_date: orderDate, // Usa a data de agendamento
-            customer_name: `${order.usuario.nome} ${order.usuario.sobrenome || ''}`.trim(),
-            customer_phone: order.usuario.telefone || '',
+            customer_name: customerName,
+            customer_phone: order.usuario && order.usuario.telefone ? order.usuario.telefone : '',
             address: address,
             product_description: productDescription,
             size: this._determineSize(order.itens),
@@ -192,6 +208,12 @@ class AlloyService {
      */
     _formatAddress(endereco) {
         if (!endereco) return '';
+        
+        // Verifica se temos as partes essenciais do endereço
+        if (!endereco.logradouro && !endereco.cidade) {
+            console.warn('Endereço incompleto ou inválido');
+            return '';
+        }
         
         const parts = [];
         

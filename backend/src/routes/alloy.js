@@ -1,4 +1,4 @@
-// routes/alloy.js - Correção para usar a data de agendamento
+// routes/alloy.js - FIXED VERSION with error handling and address validation
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
@@ -44,12 +44,18 @@ router.post('/import', async (req, res) => {
         
         console.log(`Encontrados ${alloyOrders.length} pedidos no Alloy`);
         
-        // Filtra apenas pedidos de delivery
+        // Contando pedidos de retirada
+        const pickupOrders = alloyOrders.filter(order => order.retirada === 1);
+        if (pickupOrders.length > 0) {
+            console.log(`${pickupOrders.length} pedidos são para retirada e serão ignorados`);
+        }
+        
+        // Filtra apenas pedidos de delivery (excluindo pedidos de retirada)
         const deliveryOrders = alloyOrders.filter(order => 
-            order.delivery === 1
+            order.delivery === 1 && order.retirada !== 1
         );
         
-        console.log(`${deliveryOrders.length} pedidos são para entrega`);
+        console.log(`${deliveryOrders.length} pedidos são para entrega (excluindo retiradas)`);
         
         // Extraímos datas de agendamento dos pedidos para controle
         const datesFound = new Set();
@@ -79,6 +85,8 @@ router.post('/import', async (req, res) => {
             // Processa cada pedido, importando-o para sua data de agendamento correta
             for (const order of deliveryOrders) {
                 try {
+                    console.log(`Processando pedido #${order.ref}...`);
+                    
                     // Primeiro verifica se o pedido já está importado em QUALQUER data
                     const [existingOrder] = await connection.execute(
                         'SELECT id, order_date FROM deliveries WHERE external_order_id = ?',
@@ -90,16 +98,57 @@ router.post('/import', async (req, res) => {
                         continue; // Pula este pedido
                     }
                     
+                    // Verifica se o pedido tem dados suficientes
+                    if (!order.usuario) {
+                        console.error(`Pedido ${order.ref} sem dados de usuário. Pulando...`);
+                        failures++;
+                        continue;
+                    }
+                    
+                    // Verifica se é um pedido de retirada
+                    const isPickup = order.retirada === 1;
+                    
+                    // Para pedidos de entrega, precisamos de endereço
+                    if (!isPickup && !order.endereco_de_entrega) {
+                        console.error(`Pedido ${order.ref} de entrega sem endereço. Pulando...`);
+                        failures++;
+                        continue;
+                    }
+                    
                     // Transforma o pedido do Alloy para o formato do sistema
-                    // (ordem_date é calculada a partir de data_agendamento)
-                    const delivery = alloyService.transformOrderToDelivery(order);
+                    // (order_date é calculada a partir de data_agendamento)
+                    let delivery;
+                    try {
+                        delivery = alloyService.transformOrderToDelivery(order);
+                    } catch (transformError) {
+                        console.error(`Erro ao transformar pedido ${order.ref}:`, transformError.message);
+                        failures++;
+                        continue;
+                    }
+                    
+                    // Verifica se o endereço não está vazio
+                    if (!delivery.address || delivery.address.trim() === '') {
+                        console.error(`Pedido ${order.ref} com endereço vazio ou inválido. Pulando...`);
+                        failures++;
+                        continue;
+                    }
+                    
+                    console.log(`Geocodificando endereço para pedido ${order.ref}: "${delivery.address}"`);
                     
                     // Geocodifica o endereço
-                    const coords = await googleMaps.geocodeAddress(delivery.address);
+                    let coords;
+                    try {
+                        coords = await googleMaps.geocodeAddress(delivery.address);
+                    } catch (geocodeError) {
+                        console.error(`Erro ao geocodificar endereço para pedido ${order.ref}:`, geocodeError.message);
+                        failures++;
+                        continue;
+                    }
                     
                     // Logs para debug
                     console.log(`Inserindo pedido: ${delivery.external_order_id}`);
                     console.log(`Endereço: ${delivery.address}`);
+                    console.log(`Coordenadas: ${coords.lat}, ${coords.lng}`);
                     console.log(`Data de agendamento: ${delivery.order_date}`);
                     console.log(`Janela de entrega: ${delivery.delivery_window_start} - ${delivery.delivery_window_end}`);
                     
@@ -114,7 +163,7 @@ router.post('/import', async (req, res) => {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                         [
                             delivery.external_order_id,
-                            delivery.order_date, // Agora usando a data de agendamento!
+                            delivery.order_date, // Usando a data de agendamento
                             delivery.customer_name,
                             delivery.customer_phone,
                             coords.formatted_address,
@@ -141,7 +190,7 @@ router.post('/import', async (req, res) => {
                     
                 } catch (error) {
                     failures++;
-                    console.error(`Erro ao processar pedido ${order.ref}:`, error);
+                    console.error(`Erro ao processar pedido ${order.ref}:`, error.message);
                 }
             }
             
@@ -211,9 +260,10 @@ router.get('/sync-status', async (req, res) => {
             error = e.message;
         }
         
-        // Filtra apenas pedidos que são para entrega
+        // Filtra apenas pedidos que são para entrega (excluindo retiradas)
+        // Só consideramos para sincronização pedidos que sejam de delivery E não sejam de retirada
         const deliveryOrders = alloyOrders.filter(order => 
-            order.delivery === 1
+            order.delivery === 1 && order.retirada !== 1
         );
         
         // Calcula pedidos que ainda não foram importados (em qualquer data)
