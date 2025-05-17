@@ -345,6 +345,116 @@ router.post('/:id/complete', async (req, res) => {
     }
 });
 
+// Adição da rota PUT para atualizar uma entrega
+// Adicionar ao arquivo deliveries.js (routes/deliveries.js)
+
+// Atualiza uma entrega existente
+router.put('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { 
+            customer_name, 
+            customer_phone, 
+            address, 
+            product_description, 
+            size, 
+            priority 
+        } = req.body;
+        
+        // Verifica se o endereço mudou, se sim, precisamos geocodificar novamente
+        let geocoded = {};
+        let addressChanged = false;
+        
+        // Busca o endereço atual para comparação
+        const [currentDelivery] = await pool.execute(
+            'SELECT address FROM deliveries WHERE id = ?',
+            [id]
+        );
+        
+        if (currentDelivery.length === 0) {
+            return res.status(404).json({ error: 'Entrega não encontrada' });
+        }
+        
+        // Verifica se o endereço foi alterado
+        if (currentDelivery[0].address !== address) {
+            // Geocodifica o novo endereço
+            try {
+                geocoded = await googleMaps.geocodeAddress(address);
+                addressChanged = true;
+            } catch (error) {
+                return res.status(400).json({ error: 'Erro ao geocodificar endereço: ' + error.message });
+            }
+        }
+        
+        // Constrói a query dinâmica com base em se o endereço mudou ou não
+        let query, params;
+        
+        if (addressChanged) {
+            query = `
+                UPDATE deliveries 
+                SET customer_name = ?, 
+                    customer_phone = ?, 
+                    address = ?, 
+                    lat = ?, 
+                    lng = ?, 
+                    product_description = ?, 
+                    size = ?, 
+                    priority = ?, 
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `;
+            params = [
+                customer_name,
+                customer_phone,
+                geocoded.formatted_address,
+                geocoded.lat,
+                geocoded.lng,
+                product_description,
+                size,
+                priority,
+                id
+            ];
+        } else {
+            query = `
+                UPDATE deliveries 
+                SET customer_name = ?, 
+                    customer_phone = ?, 
+                    product_description = ?, 
+                    size = ?, 
+                    priority = ?, 
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `;
+            params = [
+                customer_name,
+                customer_phone,
+                product_description,
+                size,
+                priority,
+                id
+            ];
+        }
+        
+        // Executa a atualização
+        await pool.execute(query, params);
+        
+        // Pesquisa a entrega atualizada para retornar
+        const [updated] = await pool.execute(
+            'SELECT * FROM deliveries WHERE id = ?',
+            [id]
+        );
+        
+        res.json({ 
+            message: 'Entrega atualizada com sucesso', 
+            delivery: updated[0] 
+        });
+        
+    } catch (error) {
+        console.error('Erro ao atualizar entrega:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Deleta uma entrega
 router.delete('/:id', async (req, res) => {
     try {
