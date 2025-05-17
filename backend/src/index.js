@@ -1,4 +1,4 @@
-// src/index.js - Backend principal
+// src/index.js - Backend principal (com correções de CORS e melhor log)
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -15,7 +15,7 @@ const server = http.createServer(app);
 
 // Configuração CORS
 const corsOptions = {
-    origin: 'http://localhost:3001',
+    origin: '*', // Aceita todas as origens - você pode restringir depois para 'http://localhost:3001'
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -25,30 +25,42 @@ const corsOptions = {
 // Configuração Socket.io
 const io = socketIo(server, {
     cors: {
-        origin: 'http://localhost:3001',
+        origin: '*', // Aceita todas as origens - você pode restringir depois para 'http://localhost:3001'
         methods: ['GET', 'POST'],
         credentials: true
     }
 });
 
 // Pool de conexões MySQL
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'confeitaria_entregas',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+let pool;
+try {
+    pool = mysql.createPool({
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME || 'confeitaria_entregas',
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+    });
+    console.log('Pool de conexão MySQL criado com sucesso!');
+} catch (error) {
+    console.error('ERRO ao criar pool de conexão MySQL:', error);
+}
 
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Log de todas as requisições
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
 // Adiciona header CORS em todas as respostas
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3001');
+    res.header('Access-Control-Allow-Origin', '*'); // Você pode restringir depois para 'http://localhost:3001'
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -60,9 +72,15 @@ app.use((req, res, next) => {
     }
 });
 
+// Endpoint para verificar se o servidor está funcionando
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', message: 'Servidor backend funcionando!' });
+});
+
 // Rota separada para listar rotas (mais fácil de acessar)
 app.get('/api/routes', async (req, res) => {
     try {
+        console.log('Listando rotas...');
         const query = `
             SELECT 
                 r.id,
@@ -80,6 +98,7 @@ app.get('/api/routes', async (req, res) => {
         `;
         
         const [rows] = await pool.execute(query);
+        console.log(`Retornando ${rows.length} rotas`);
         res.json(rows);
     } catch (error) {
         console.error('Erro ao buscar rotas:', error);
@@ -91,6 +110,12 @@ app.get('/api/routes', async (req, res) => {
 app.use('/api/deliveries', deliveriesRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/settings', settingsRouter);
+
+// Endpoint para tratar URLs incorretas
+app.use('*', (req, res) => {
+    console.log(`Rota não encontrada: ${req.originalUrl}`);
+    res.status(404).json({ error: 'Rota não encontrada' });
+});
 
 // Socket.io para rastreamento em tempo real
 io.on('connection', (socket) => {
@@ -119,7 +144,18 @@ io.on('connection', (socket) => {
 // Torna io disponível para as rotas
 app.set('socketio', io);
 
+// Tratamento de erros global
+app.use((err, req, res, next) => {
+    console.error('Erro não tratado:', err);
+    res.status(500).json({ error: 'Erro interno do servidor', details: err.message });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    console.log('Configurações carregadas:');
+    console.log(`- DB_HOST: ${process.env.DB_HOST || 'localhost'}`);
+    console.log(`- DB_NAME: ${process.env.DB_NAME || 'confeitaria_entregas'}`);
+    console.log(`- FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
 });

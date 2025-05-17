@@ -39,7 +39,11 @@ router.get('/', async (req, res) => {
         
         query += ' ORDER BY priority DESC';
         
+        console.log(`Executando query para buscar entregas: ${query} com data ${date || 'HOJE'}`);
+        
         const [rows] = await pool.execute(query, params);
+        console.log(`Encontradas ${rows.length} entregas`);
+        
         res.json(rows);
     } catch (error) {
         console.error('Erro ao buscar entregas:', error);
@@ -47,7 +51,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Lista rotas por data ou todas - ENDPOINT CORRIGIDO
+// Lista rotas por data ou todas
 router.get('/routes', async (req, res) => {
     try {
         const query = `
@@ -109,6 +113,8 @@ router.delete('/clear/:date', async (req, res) => {
     }
 });
 
+// Versão corrigida da função de adicionar entrega em backend/src/routes/deliveries.js
+
 // Adiciona nova entrega
 router.post('/', async (req, res) => {
     try {
@@ -117,15 +123,53 @@ router.post('/', async (req, res) => {
             customer_phone, 
             address, 
             product_description, 
-            size, 
-            priority, 
-            delivery_window_start, 
-            delivery_window_end,
+            size = 'M',  // Valor padrão
+            priority = 0,  // Valor padrão 
+            delivery_window_start = null,  // Valor padrão
+            delivery_window_end = null,  // Valor padrão
             order_date 
         } = req.body;
         
+        // Verifica se os campos obrigatórios estão presentes
+        if (!customer_name || !address || !product_description) {
+            return res.status(400).json({ 
+                error: 'Campos obrigatórios faltando', 
+                required: ['customer_name', 'address', 'product_description'] 
+            });
+        }
+        
+        // Data padrão é hoje se não for fornecida
+        const effectiveDate = order_date || new Date().toISOString().split('T')[0];
+        
+        console.log('Tentando geocodificar endereço:', address);
+        
         // Geocodifica o endereço
-        const coords = await googleMaps.geocodeAddress(address);
+        let coords;
+        try {
+            coords = await googleMaps.geocodeAddress(address);
+            console.log('Coordenadas obtidas:', coords);
+        } catch (geocodeError) {
+            console.error('Erro ao geocodificar:', geocodeError);
+            return res.status(400).json({ 
+                error: 'Não foi possível encontrar o endereço fornecido',
+                details: geocodeError.message
+            });
+        }
+        
+        console.log('Inserindo entrega no banco de dados...');
+        console.log('Parâmetros:', [
+            effectiveDate,
+            customer_name, 
+            customer_phone || '', // Usa string vazia em vez de undefined
+            coords.formatted_address, 
+            coords.lat, 
+            coords.lng, 
+            product_description, 
+            size || 'M', 
+            priority || 0, 
+            delivery_window_start || null, 
+            delivery_window_end || null
+        ]);
         
         const [result] = await pool.execute(
             `INSERT INTO deliveries (
@@ -135,21 +179,29 @@ router.post('/', async (req, res) => {
             ) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                order_date || new Date().toISOString().split('T')[0],
+                effectiveDate,
                 customer_name, 
-                customer_phone, 
+                customer_phone || '', // Usa string vazia em vez de undefined
                 coords.formatted_address, 
                 coords.lat, 
                 coords.lng, 
                 product_description, 
-                size, 
-                priority, 
-                delivery_window_start, 
-                delivery_window_end
+                size || 'M', 
+                priority || 0, 
+                delivery_window_start || null, 
+                delivery_window_end || null
             ]
         );
         
-        res.json({ id: result.insertId, ...req.body, ...coords });
+        console.log('Entrega adicionada com sucesso, ID:', result.insertId);
+        
+        res.status(201).json({ 
+            id: result.insertId, 
+            order_date: effectiveDate,
+            ...req.body, 
+            ...coords,
+            message: 'Entrega adicionada com sucesso' 
+        });
     } catch (error) {
         console.error('Erro ao adicionar entrega:', error);
         res.status(500).json({ error: error.message });
@@ -161,6 +213,12 @@ router.post('/optimize', async (req, res) => {
     try {
         const { date, manualOrder, pickupStops } = req.body;
         const routeDate = date || new Date().toISOString().split('T')[0];
+        
+        console.log('Recebendo solicitação de otimização:', {
+            date: routeDate,
+            manualOrder: manualOrder,
+            pickupStops: pickupStops
+        });
         
         // Busca configurações
         const [settingsRows] = await pool.execute(
@@ -188,20 +246,6 @@ router.post('/optimize', async (req, res) => {
             return res.json({ message: 'Nenhuma entrega disponível para otimização' });
         }
         
-        // Aplica ordem manual se existir, mas mantém prioridade como critério principal
-        if (manualOrder && Object.keys(manualOrder).length > 0) {
-            deliveries.sort((a, b) => {
-                // Primeiro ordena por prioridade (maior primeiro)
-                if (a.priority !== b.priority) {
-                    return b.priority - a.priority;
-                }
-                // Depois por ordem manual se existir
-                const orderA = manualOrder[a.id] || 999;
-                const orderB = manualOrder[b.id] || 999;
-                return orderA - orderB;
-            });
-        }
-        
         // Define se a rota é circular
         const circularRoute = settings.circular_route === 'true';
         
@@ -227,32 +271,20 @@ router.post('/optimize', async (req, res) => {
         
         // Adiciona paradas na confeitaria se solicitado
         let allStops = [...deliveries];
+        
         if (pickupStops && pickupStops.length > 0) {
+            console.log('Adicionando paradas na confeitaria:', pickupStops);
+            
             pickupStops.forEach(stop => {
                 allStops.push({
-                    id: `pickup_${Date.now()}_${Math.random()}`,
+                    id: stop.id,
                     lat: depot.lat,
                     lng: depot.lng,
                     address: depot.address,
                     type: 'pickup',
                     priority: 0,
-                    order: stop.order
+                    order: stop.order || 999
                 });
-            });
-            
-            // Reordena incluindo as paradas
-            allStops.sort((a, b) => {
-                // Prioridade primeiro
-                const prioA = a.priority || 0;
-                const prioB = b.priority || 0;
-                if (prioA !== prioB) {
-                    return prioB - prioA;
-                }
-                
-                // Depois ordem manual
-                const orderA = a.type === 'pickup' ? a.order : (manualOrder[a.id] || 999);
-                const orderB = b.type === 'pickup' ? b.order : (manualOrder[b.id] || 999);
-                return orderA - orderB;
             });
         }
         
@@ -291,7 +323,6 @@ router.post('/optimize', async (req, res) => {
     }
 });
 
-// Demais rotas permanecem iguais...
 // Inicia rota
 router.post('/routes/:id/start', async (req, res) => {
     try {
