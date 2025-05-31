@@ -274,6 +274,8 @@ async function loadDeliveries() {
             });
         });
         
+        checkExistingRoute(routeDate);
+
         // Adiciona paradas na confeitaria
         pickupStops.forEach((stop, index) => {
             allItems.push({
@@ -675,10 +677,10 @@ async function clearAllDeliveries() {
     
     try {
         const routeDate = getRouteDate();
-        const response = await fetch(`${API_URL}/deliveries/clear/${routeDate}`, {
+        const response = await fetch(`${API_URL}/deliveries/clear/${routeDate}`, { // CORRETO: usar routeDate
             method: 'DELETE'
         });
-        
+                
         if (response.ok) {
             showToast('Todas as entregas foram removidas', 'success');
             loadDeliveries();
@@ -813,6 +815,56 @@ document.getElementById('edit-delivery-form').addEventListener('submit', async (
         showToast('Erro ao atualizar entrega: ' + error.message, 'error');
     }
 });
+
+// Verifica se há uma rota otimizada existente para a data atual
+async function checkExistingRoute(date) {
+    try {
+        // Busca rotas existentes
+        const response = await fetch(`${API_URL}/deliveries/routes`);
+        if (!response.ok) return;
+        
+        const routes = await response.json();
+        const existingRoute = routes.find(r => r.route_date === date);
+        
+        if (existingRoute) {
+            console.log('Rota existente encontrada:', existingRoute);
+            
+            // Verifica se há informações de rota otimizada
+            if (existingRoute.total_distance && existingRoute.total_duration) {
+                // Recria objeto de rota
+                currentRoute = {
+                    routeId: existingRoute.id,
+                    totalDistance: existingRoute.total_distance,
+                    totalDuration: existingRoute.total_duration,
+                };
+                
+                // Verifica se há ordem otimizada salva no banco
+                if (existingRoute.optimized_order) {
+                    try {
+                        // Parse da string JSON para objeto
+                        currentRoute.optimizedOrder = JSON.parse(existingRoute.optimized_order);
+                        
+                        // Mostra a rota no mapa
+                        showOptimizedRoute(currentRoute);
+                        
+                        // Habilita botão de iniciar
+                        document.getElementById('start-route').disabled = false;
+                        
+                        console.log('Rota otimizada carregada do banco de dados.');
+                        showToast('Rota otimizada carregada', 'success');
+                    } catch (e) {
+                        console.error('Erro ao processar ordem otimizada:', e);
+                    }
+                } else {
+                    // Se não houver ordem otimizada, atualize apenas as estatísticas
+                    updateRouteStats();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao verificar rotas existentes:', error);
+    }
+}
 
 // Modifica a função de otimização de rota para enviar corretamente as paradas
 document.getElementById('optimize-route').addEventListener('click', async () => {

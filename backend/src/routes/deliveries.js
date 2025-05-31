@@ -51,9 +51,13 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Lista rotas por data ou todas
+// Lista rotas por data ou todas (excluindo arquivadas por padrão)
 router.get('/routes', async (req, res) => {
     try {
+        const { includeArchived = 'false' } = req.query;
+        
+        let whereClause = includeArchived === 'true' ? '' : 'WHERE r.archived = FALSE OR r.archived IS NULL';
+        
         const query = `
             SELECT 
                 r.id,
@@ -61,10 +65,13 @@ router.get('/routes', async (req, res) => {
                 r.status,
                 r.total_distance,
                 r.total_duration,
+                r.archived,
+                r.archived_at,
                 COUNT(DISTINCT d.id) as delivery_count,
                 COUNT(DISTINCT CASE WHEN d.status = 'delivered' THEN d.id END) as delivered_count
             FROM routes r 
             LEFT JOIN deliveries d ON r.route_date = d.order_date 
+            ${whereClause}
             GROUP BY r.id 
             ORDER BY r.route_date DESC
             LIMIT 30
@@ -83,37 +90,43 @@ router.delete('/clear/:date', async (req, res) => {
     try {
         const { date } = req.params;
         
+        console.log(`Recebendo solicitação para excluir rota da data ${date}`);
+        
         // Primeiro deleta notificações e rastreamento
-        await pool.execute(
+        const [notificationResult] = await pool.execute(
             'DELETE n FROM notifications n JOIN deliveries d ON n.delivery_id = d.id WHERE d.order_date = ?',
             [date]
         );
         
-        await pool.execute(
+        const [trackingResult] = await pool.execute(
             'DELETE t FROM tracking t JOIN deliveries d ON t.delivery_id = d.id WHERE d.order_date = ?',
             [date]
         );
         
         // Deleta as entregas
-        await pool.execute(
+        const [deliveryResult] = await pool.execute(
             'DELETE FROM deliveries WHERE order_date = ?',
             [date]
         );
         
-        // Cancela rotas do dia
-        await pool.execute(
-            'UPDATE routes SET status = "cancelled" WHERE route_date = ?',
+        // Remove a rota (ao invés de só cancelar)
+        const [routeResult] = await pool.execute(
+            'DELETE FROM routes WHERE route_date = ?',
             [date]
         );
         
-        res.json({ message: 'Todas as entregas foram removidas' });
+        console.log(`Exclusão concluída. Entregas removidas: ${deliveryResult.affectedRows}, Rotas removidas: ${routeResult.affectedRows}`);
+        
+        res.json({ 
+            message: 'Rota e entregas removidas com sucesso',
+            deliveriesRemoved: deliveryResult.affectedRows,
+            routesRemoved: routeResult.affectedRows
+        });
     } catch (error) {
         console.error('Erro ao limpar entregas:', error);
         res.status(500).json({ error: error.message });
     }
 });
-
-// Versão corrigida da função de adicionar entrega em backend/src/routes/deliveries.js
 
 // Adiciona nova entrega
 router.post('/', async (req, res) => {
@@ -230,11 +243,17 @@ router.post('/optimize', async (req, res) => {
             settings[row.setting_key] = row.setting_value;
         });
         
-        // Cancela rotas anteriores não finalizadas
-        await pool.execute(
-            'UPDATE routes SET status = "cancelled" WHERE route_date = ? AND status IN ("planned", "active")',
+        // Verifica se já existe uma rota para esta data
+        const [existingRoutes] = await pool.execute(
+            'SELECT id FROM routes WHERE route_date = ?',
             [routeDate]
         );
+        
+        // Cancela rotas anteriores não finalizadas (não mais necessário se for atualizar)
+        // await pool.execute(
+        //    'UPDATE routes SET status = "cancelled" WHERE route_date = ? AND status IN ("planned", "active")',
+        //    [routeDate]
+        // );
         
         // Busca todas as entregas do dia
         const [deliveries] = await pool.execute(
@@ -297,11 +316,24 @@ router.post('/optimize', async (req, res) => {
         // Otimiza a rota
         const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder);
         
-        // Salva nova rota otimizada
-        const [routeResult] = await pool.execute(
-            'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES (?, ?, ?, ?)',
-            [routeDate, optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder)]
-        );
+        let routeId;
+        
+        // Atualiza ou cria rota
+        if (existingRoutes.length > 0) {
+            // Atualiza rota existente
+            await pool.execute(
+                'UPDATE routes SET total_distance = ?, total_duration = ?, optimized_order = ?, status = "planned" WHERE id = ?',
+                [optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder), existingRoutes[0].id]
+            );
+            routeId = existingRoutes[0].id;
+        } else {
+            // Cria nova rota
+            const [routeResult] = await pool.execute(
+                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES (?, ?, ?, ?)',
+                [routeDate, optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder)]
+            );
+            routeId = routeResult.insertId;
+        }
         
         // Atualiza status de todas as entregas incluídas para "optimized"
         await pool.execute(
@@ -310,7 +342,7 @@ router.post('/optimize', async (req, res) => {
         );
         
         res.json({
-            routeId: routeResult.insertId,
+            routeId: routeId,
             ...optimizedRoute,
             circularRoute: circularRoute,
             originAddress: originAddress,

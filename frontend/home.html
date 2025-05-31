@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Entregas - Confeitaria</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎂</text></svg>">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -22,7 +23,7 @@
             <p class="text-muted">Gerencie suas rotas de entrega de forma eficiente</p>
         </div>
         
-        <div class="new-route-section">
+<div class="new-route-section">
             <h2>Criar Nova Rota</h2>
             <input type="date" id="new-route-date" class="date-picker">
             <button onclick="createNewRoute()" class="new-route-btn">
@@ -31,13 +32,17 @@
         </div>
         
         <div class="existing-routes">
-            <h2>Rotas Existentes</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Rotas Existentes</h2>
+                <button onclick="window.location.href='archive.html'" class="btn btn-secondary">
+                    📁 Ver Arquivo
+                </button>
+            </div>
             <div id="routes-list">
                 <p class="text-center text-muted">Carregando...</p>
             </div>
         </div>
-    </div>
-    
+                    
     <script>
         const API_URL = 'http://localhost:3000/api';
         
@@ -65,19 +70,44 @@
                 routes.forEach(route => {
                     const routeCard = document.createElement('div');
                     routeCard.className = 'route-card';
-                    routeCard.onclick = () => openRoute(route.route_date);
+                    routeCard.onclick = (e) => {
+                        // Não abre a rota se clicou nos botões de ação
+                        if (e.target.classList.contains('delete-route-btn') || 
+                            e.target.closest('.delete-route-btn') ||
+                            e.target.classList.contains('archive-route-btn') || 
+                            e.target.closest('.archive-route-btn')) {
+                            return;
+                        }
+                        // Remove timestamp se existir e pega apenas YYYY-MM-DD
+                        const cleanDate = route.route_date.split('T')[0];
+                        openRoute(cleanDate);
+                    };
                     
-                    const routeDate = new Date(route.route_date + 'T00:00:00');
-                    const formattedDate = routeDate.toLocaleDateString('pt-BR', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
+                    // Corrige a formatação de data - remove o timestamp
+                    let formattedDate = 'Data Inválida';
+                    let cleanDate = route.route_date;
+                    
+                    try {
+                        if (route.route_date) {
+                            // Remove timestamp se existir e pega apenas YYYY-MM-DD
+                            cleanDate = route.route_date.split('T')[0];
+                            const routeDate = new Date(cleanDate + 'T00:00:00');
+                            if (!isNaN(routeDate.getTime())) {
+                                formattedDate = routeDate.toLocaleDateString('pt-BR', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Erro ao formatar data:', e);
+                    }
                     
                     // Verifica se é hoje
                     const today = new Date().toISOString().split('T')[0];
-                    const isToday = route.route_date === today;
+                    const isToday = cleanDate === today;
                     
                     const statusText = {
                         'planned': 'Planejada',
@@ -94,7 +124,17 @@
                     };
                     
                     routeCard.innerHTML = `
-                        <h3>${formattedDate} ${isToday ? '<span style="color: #E5B5B3;">(Hoje)</span>' : ''}</h3>
+                        <div class="route-card-header">
+                            <h3>${formattedDate} ${isToday ? '<span style="color: #E5B5B3;">(Hoje)</span>' : ''}</h3>
+                            <div class="route-actions">
+                                <button class="archive-route-btn" onclick="archiveRoute(${route.id}, event)" title="Arquivar rota">
+                                    🗃️
+                                </button>
+                                <button class="delete-route-btn" onclick="deleteRoute('${cleanDate}', '${route.status}', event)" title="Excluir rota">
+                                    🗑️
+                                </button>
+                            </div>                        
+                        </div>
                         <div class="route-stats">
                             <span>📦 ${route.delivery_count || 0} entregas</span>
                             ${route.delivered_count ? `<span>✅ ${route.delivered_count} entregues</span>` : ''}
@@ -128,6 +168,69 @@
             window.location.href = `routes.html?date=${date}`;
         }
         
+        // Função de exclusão de rota revisada
+        function deleteRoute(date, status, event) {
+            // Impede o clique no card
+            event.stopPropagation();
+            
+            if (!confirm(`Tem certeza que deseja excluir esta rota de ${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}?`)) {
+                return;
+            }
+            
+            console.log(`Tentando excluir rota para a data ${date}...`); // Para debug
+            
+            fetch(`${API_URL}/deliveries/clear/${date}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                console.log('Resposta ao excluir:', response.status); // Para debug
+                
+                if (response.ok) {
+                    showToast('Rota excluída com sucesso!', 'success');
+                    loadRoutes(); // Recarrega lista de rotas
+                    return null; // Retorno explícito para evitar warning
+                } else {
+                    return response.json();
+                }
+            })
+            .then(data => {
+                if (data && data.error) {
+                    throw new Error(data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao excluir rota:', error);
+                showToast('Erro ao excluir rota: ' + error.message, 'error');
+            });
+        }
+
+        // Arquiva uma rota
+        async function archiveRoute(routeId, event) {
+            // Previne que o clique abra a rota
+            event.stopPropagation();
+            
+            if (!confirm('Tem certeza que deseja arquivar esta rota? Ela será movida para o arquivo.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/archive/routes/${routeId}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    showToast('Rota arquivada com sucesso!', 'success');
+                    loadRoutes(); // Recarrega a lista
+                } else {
+                    const error = await response.json();
+                    showToast('Erro ao arquivar rota: ' + error.error, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao arquivar rota:', error);
+                showToast('Erro ao arquivar rota', 'error');
+            }
+        }
+
         // Sistema de Toast
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
@@ -153,5 +256,104 @@
         // Atualiza a cada 30 segundos
         setInterval(loadRoutes, 30000);
     </script>
+    
+    <style>
+        /* Adiciona estilos específicos para o botão de excluir */
+        .route-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .delete-route-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            opacity: 0.7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .route-actions {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .archive-route-btn {
+            background: none;
+            border: none;
+            color: #6c757d;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            opacity: 0.7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .archive-route-btn:hover {
+            background-color: rgba(108, 117, 125, 0.1);
+            opacity: 1;
+            transform: scale(1.1);
+            color: #495057;
+        }
+        
+        .delete-route-btn:hover {
+            background-color: rgba(220, 53, 69, 0.1);
+            opacity: 1;
+            transform: scale(1.1);
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 2000;
+            animation: slideUp 0.3s ease-out;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.success {
+            border-left: 4px solid #28a745;
+        }
+
+        .toast.error {
+            border-left: 4px solid #dc3545;
+        }
+
+        .toast.info {
+            border-left: 4px solid #17a2b8;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
 </body>
 </html>

@@ -9,6 +9,7 @@ require('dotenv').config();
 const deliveriesRouter = require('./routes/deliveries');
 const trackingRouter = require('./routes/tracking');
 const settingsRouter = require('./routes/settings');
+const archiveRouter = require('./routes/archive');
 
 const app = express();
 const server = http.createServer(app);
@@ -110,6 +111,7 @@ app.get('/api/routes', async (req, res) => {
 app.use('/api/deliveries', deliveriesRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/archive', archiveRouter);
 
 // Endpoint para tratar URLs incorretas
 app.use('*', (req, res) => {
