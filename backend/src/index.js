@@ -1,4 +1,4 @@
-// src/index.js - Backend principal (com correções de CORS e melhor log)
+// src/index.js - Backend principal (com rota de arquivo incluída)
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -111,7 +111,7 @@ app.get('/api/routes', async (req, res) => {
 app.use('/api/deliveries', deliveriesRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/archive', archiveRouter);
+app.use('/api/archive', archiveRouter); // <- Rota do arquivo adicionada
 
 // Endpoint para tratar URLs incorretas
 app.use('*', (req, res) => {

@@ -1,4 +1,4 @@
-// backend/src/routes/archive.js - Rotas para arquivamento
+// backend/src/routes/archive.js - Versão atualizada com estatísticas reais
 const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
@@ -27,7 +27,7 @@ router.get('/routes', async (req, res) => {
         
         console.log(`Buscando rotas arquivadas - Página: ${pageNum}, Limit: ${limitNum}, Offset: ${offset}`);
         
-        // Primeira tentativa: query mais simples sem LIMIT para testar
+        // Query base para rotas arquivadas
         let baseQuery = `
             SELECT 
                 r.id,
@@ -42,10 +42,24 @@ router.get('/routes', async (req, res) => {
         
         let params = [];
         
-        // Filtro de busca por data
+        // Filtro de busca por data ou mês
         if (search && search.trim()) {
-            baseQuery += ' AND r.route_date LIKE ?';
-            params.push(`%${search.trim()}%`);
+            const searchTerm = search.trim();
+            // Se tem 7 caracteres, é busca por mês (YYYY-MM)
+            if (searchTerm.length === 7 && searchTerm.includes('-')) {
+                baseQuery += ' AND DATE_FORMAT(r.route_date, "%Y-%m") = ?';
+                params.push(searchTerm);
+            } 
+            // Se tem 10 caracteres, é busca por data específica (YYYY-MM-DD)
+            else if (searchTerm.length === 10 && searchTerm.includes('-')) {
+                baseQuery += ' AND r.route_date = ?';
+                params.push(searchTerm);
+            } 
+            // Busca geral por parte da data
+            else {
+                baseQuery += ' AND r.route_date LIKE ?';
+                params.push(`%${searchTerm}%`);
+            }
         }
         
         baseQuery += ' ORDER BY r.archived_at DESC';
@@ -53,14 +67,14 @@ router.get('/routes', async (req, res) => {
         console.log('Query base:', baseQuery);
         console.log('Parâmetros base:', params);
         
-        // Primeiro testa sem LIMIT
+        // Executa query sem LIMIT para contar total
         const [allRoutes] = await pool.execute(baseQuery, params);
         console.log(`Total de rotas encontradas: ${allRoutes.length}`);
         
-        // Aplicar paginação manualmente no JavaScript
+        // Aplica paginação manualmente
         const paginatedRoutes = allRoutes.slice(offset, offset + limitNum);
         
-        // Para cada rota, buscar as entregas separadamente
+        // Para cada rota, busca as entregas separadamente
         const routesWithDeliveries = [];
         for (const route of paginatedRoutes) {
             try {
@@ -125,7 +139,7 @@ router.post('/routes/:id', async (req, res) => {
             return res.status(400).json({ error: 'Rota já está arquivada' });
         }
         
-        // Arquiva a rota (sem restrição de data para arquivamento manual)
+        // Arquiva a rota
         await pool.execute(
             'UPDATE routes SET archived = TRUE, archived_at = NOW() WHERE id = ?',
             [id]
@@ -206,7 +220,7 @@ router.post('/auto-archive', async (req, res) => {
 });
 
 /**
- * Estatísticas do arquivo
+ * Estatísticas do arquivo com dados reais
  * GET /api/archive/stats
  */
 router.get('/stats', async (req, res) => {
@@ -215,6 +229,49 @@ router.get('/stats', async (req, res) => {
         const [totalResult] = await pool.execute(
             'SELECT COUNT(*) as total FROM routes WHERE archived = TRUE'
         );
+        
+        // Busca configurações de preço
+        const [settingsResult] = await pool.execute(
+            'SELECT setting_key, setting_value FROM settings WHERE setting_key IN ("daily_rate", "km_rate")'
+        );
+        
+        const settings = {};
+        settingsResult.forEach(row => {
+            settings[row.setting_key] = parseFloat(row.setting_value) || 0;
+        });
+        
+        const dailyRate = settings.daily_rate || 100;
+        const kmRate = settings.km_rate || 2.5;
+        
+        // Estatísticas do mês atual
+        const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+        
+        // Rotas arquivadas do mês atual com suas entregas e distâncias
+        const [monthRoutes] = await pool.execute(`
+            SELECT 
+                r.id,
+                r.route_date,
+                r.total_distance,
+                COUNT(d.id) as delivery_count
+            FROM routes r
+            LEFT JOIN deliveries d ON r.route_date = d.order_date
+            WHERE r.archived = TRUE 
+            AND DATE_FORMAT(r.archived_at, '%Y-%m') = ?
+            GROUP BY r.id, r.route_date, r.total_distance
+        `, [currentMonth]);
+        
+        // Calcula totais do mês
+        let monthDeliveries = 0;
+        let monthValue = 0;
+        
+        monthRoutes.forEach(route => {
+            const deliveries = route.delivery_count || 0;
+            const distance = route.total_distance || 0;
+            const distanceKm = distance / 1000;
+            
+            monthDeliveries += deliveries;
+            monthValue += dailyRate + (distanceKm * kmRate);
+        });
         
         // Rotas arquivadas por mês (últimos 6 meses)
         const [monthlyResult] = await pool.execute(`
@@ -228,11 +285,10 @@ router.get('/stats', async (req, res) => {
             ORDER BY month DESC
         `);
         
-        // Espaço economizado (estimativa baseada no número de entregas)
-        const [spaceResult] = await pool.execute(`
+        // Total de entregas de rotas arquivadas
+        const [deliveriesResult] = await pool.execute(`
             SELECT 
-                COUNT(d.id) as total_deliveries,
-                COUNT(DISTINCT r.id) as total_routes
+                COUNT(d.id) as total_deliveries
             FROM routes r
             LEFT JOIN deliveries d ON r.route_date = d.order_date
             WHERE r.archived = TRUE
@@ -240,9 +296,14 @@ router.get('/stats', async (req, res) => {
         
         res.json({
             totalArchived: totalResult[0].total,
+            monthDeliveries: monthDeliveries,
+            monthValue: monthValue,
             monthlyStats: monthlyResult,
-            estimatedDeliveries: spaceResult[0].total_deliveries,
-            estimatedRoutes: spaceResult[0].total_routes
+            totalDeliveries: deliveriesResult[0].total_deliveries || 0,
+            settings: {
+                dailyRate,
+                kmRate
+            }
         });
     } catch (error) {
         console.error('Erro ao buscar estatísticas:', error);

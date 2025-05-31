@@ -1,4 +1,4 @@
--- database/schema.sql - Versão atualizada
+-- database/schema.sql - Versão atualizada com colunas de arquivamento
 CREATE DATABASE IF NOT EXISTS confeitaria_entregas;
 USE confeitaria_entregas;
 
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
     INDEX idx_external_order_id (external_order_id)
 );
 
--- Tabela de rotas otimizadas
+-- Tabela de rotas otimizadas (com colunas de arquivamento)
 CREATE TABLE IF NOT EXISTS routes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     route_date DATE NOT NULL,
@@ -35,11 +35,25 @@ CREATE TABLE IF NOT EXISTS routes (
     total_duration INT,
     optimized_order JSON,
     status ENUM('planned', 'active', 'completed', 'cancelled') DEFAULT 'planned',
+    archived BOOLEAN DEFAULT FALSE,
+    archived_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_route_date (route_date),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    INDEX idx_archived (archived),
+    INDEX idx_archived_at (archived_at)
 );
+
+-- Adiciona colunas de arquivamento se não existirem (para bancos existentes)
+ALTER TABLE routes 
+ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL;
+
+-- Adiciona índices se não existirem
+ALTER TABLE routes 
+ADD INDEX IF NOT EXISTS idx_archived (archived),
+ADD INDEX IF NOT EXISTS idx_archived_at (archived_at);
 
 -- Tabela de rastreamento
 CREATE TABLE IF NOT EXISTS tracking (
@@ -77,7 +91,9 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT INTO settings (setting_key, setting_value) VALUES 
     ('circular_route', 'true'),
     ('origin_address', 'R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030'),
-    ('stop_time', '8')
+    ('stop_time', '8'),
+    ('daily_rate', '100.00'),
+    ('km_rate', '2.50')
 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
 
 -- Tabela de paradas (pickup stops)
@@ -99,5 +115,17 @@ BEGIN
     DELETE FROM deliveries 
     WHERE order_date < DATE_SUB(CURDATE(), INTERVAL 30 DAY)
     AND status IN ('delivered', 'cancelled');
+END//
+DELIMITER ;
+
+-- Procedimento para arquivamento automático de rotas antigas
+DELIMITER //
+CREATE PROCEDURE IF NOT EXISTS auto_archive_old_routes()
+BEGIN
+    UPDATE routes 
+    SET archived = TRUE, archived_at = NOW()
+    WHERE route_date < DATE_SUB(CURDATE(), INTERVAL 3 DAY)
+    AND archived = FALSE
+    AND status IN ('completed', 'cancelled');
 END//
 DELIMITER ;
