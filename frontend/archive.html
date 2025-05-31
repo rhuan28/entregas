@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arquivo de Rotas - Confeitaria</title>
+    <title>Arquivo de Rotas - Demiplié</title>
+    <link rel="icon" type="image/png" href="assets/favicon.ico">
     <link rel="stylesheet" href="css/styles.css">
     <style>
         .archive-container {
@@ -286,8 +287,9 @@
     <!-- Navbar -->
     <nav class="navbar">
         <div class="navbar-left">
+            <img src="assets/logo-demiplie.png" alt="Demiplié" class="navbar-logo" />
             <div class="navbar-header">
-                <h1 class="navbar-title">🎂 Confeitaria Entregas</h1>
+                <span class="navbar-title">Gestão de Entregas</span>
             </div>
         </div>
     </nav>
@@ -377,7 +379,7 @@
 
                 document.getElementById('total-archived').textContent = stats.totalArchived;
                 document.getElementById('month-deliveries').textContent = stats.monthDeliveries || 0;
-                document.getElementById('month-value').textContent = `R$ ${(stats.monthValue || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                document.getElementById('month-value').textContent = `R$ ${(stats.monthValue || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             } catch (error) {
                 console.error('Erro ao carregar estatísticas:', error);
                 // Valores padrão em caso de erro
