@@ -1,8 +1,8 @@
 // Arquivo: routes.js - Versão corrigida e completa
 // Corrige o problema com showOptimizedRoute e adiciona melhor tratamento de erros
 
-const API_URL = 'http://localhost:3000/api';
-const socket = io('http://localhost:3000');
+const API_URL = window.API_URL || 'http://localhost:3000/api';
+const socket = io(window.API_CONFIG?.SOCKET_URL || 'http://localhost:3000');
 
 let map;
 let directionsService;

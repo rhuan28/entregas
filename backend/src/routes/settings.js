@@ -1,29 +1,21 @@
-// routes/settings.js
+// routes/settings.js - Atualizado para PostgreSQL
 const express = require('express');
 const router = express.Router();
-const mysql = require('mysql2/promise');
 
-// Pool de conexões MySQL
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'confeitaria_entregas',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+// Obtém a instância do banco de dados a partir do app
+function getDb(req) {
+    return req.app.get('db');
+}
 
 // Obtém todas as configurações
 router.get('/', async (req, res) => {
     try {
-        const [settings] = await pool.execute(
-            'SELECT * FROM settings'
-        );
+        const db = getDb(req);
+        const result = await db.query('SELECT * FROM settings');
         
         // Converte para objeto key-value
         const settingsObject = {};
-        settings.forEach(setting => {
+        result.rows.forEach(setting => {
             settingsObject[setting.setting_key] = setting.setting_value;
         });
         
@@ -48,9 +40,15 @@ router.put('/:key', async (req, res) => {
             }
         }
         
-        await pool.execute(
-            'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
-            [key, value, value]
+        const db = getDb(req);
+        
+        // PostgreSQL usa ON CONFLICT ao invés de ON DUPLICATE KEY UPDATE
+        await db.query(
+            `INSERT INTO settings (setting_key, setting_value) 
+             VALUES ($1, $2) 
+             ON CONFLICT (setting_key) 
+             DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP`,
+            [key, value]
         );
         
         res.json({ message: 'Configuração atualizada' });
@@ -62,34 +60,32 @@ router.put('/:key', async (req, res) => {
 
 // Atualiza múltiplas configurações
 router.post('/bulk', async (req, res) => {
-    const connection = await pool.getConnection();
-    
     try {
-        await connection.beginTransaction();
-        
         const settings = req.body;
+        const db = getDb(req);
         
-        for (const [key, value] of Object.entries(settings)) {
-            // Validação para campos numéricos
-            if ((key === 'daily_rate' || key === 'km_rate') && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) {
-                await connection.rollback();
-                return res.status(400).json({ error: `Valor inválido para configuração de preço: ${key}` });
+        // Usa transação para garantir consistência
+        await db.transaction(async (client) => {
+            for (const [key, value] of Object.entries(settings)) {
+                // Validação para campos numéricos
+                if ((key === 'daily_rate' || key === 'km_rate') && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) {
+                    throw new Error(`Valor inválido para configuração de preço: ${key}`);
+                }
+                
+                await client.query(
+                    `INSERT INTO settings (setting_key, setting_value) 
+                     VALUES ($1, $2) 
+                     ON CONFLICT (setting_key) 
+                     DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP`,
+                    [key, value]
+                );
             }
-            
-            await connection.execute(
-                'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
-                [key, value, value]
-            );
-        }
+        });
         
-        await connection.commit();
         res.json({ message: 'Configurações atualizadas' });
     } catch (error) {
-        await connection.rollback();
         console.error('Erro ao atualizar configurações:', error);
         res.status(500).json({ error: error.message });
-    } finally {
-        connection.release();
     }
 });
 

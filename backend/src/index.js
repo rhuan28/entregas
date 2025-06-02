@@ -1,9 +1,9 @@
-// src/index.js - Backend principal (com rota de arquivo incluída)
+// src/index.js - Backend principal atualizado para PostgreSQL
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
-const mysql = require('mysql2/promise');
+const db = require('./database'); // Nova configuração PostgreSQL
 require('dotenv').config();
 
 const deliveriesRouter = require('./routes/deliveries');
@@ -14,9 +14,14 @@ const archiveRouter = require('./routes/archive');
 const app = express();
 const server = http.createServer(app);
 
-// Configuração CORS
+// Configuração CORS para produção
 const corsOptions = {
-    origin: '*', // Aceita todas as origens - você pode restringir depois para 'http://localhost:3001'
+    origin: [
+        'https://confeitaria-entregas.vercel.app', // Substitua pela sua URL do Vercel
+        process.env.FRONTEND_URL,
+        'http://localhost:3001', // Para desenvolvimento local
+        'http://localhost:3000'  // Para desenvolvimento local
+    ].filter(Boolean), // Remove valores undefined/null
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -26,27 +31,33 @@ const corsOptions = {
 // Configuração Socket.io
 const io = socketIo(server, {
     cors: {
-        origin: '*', // Aceita todas as origens - você pode restringir depois para 'http://localhost:3001'
+        origin: corsOptions.origin,
         methods: ['GET', 'POST'],
         credentials: true
     }
 });
 
-// Pool de conexões MySQL
-let pool;
-try {
-    pool = mysql.createPool({
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME || 'confeitaria_entregas',
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0
-    });
-    console.log('Pool de conexão MySQL criado com sucesso!');
-} catch (error) {
-    console.error('ERRO ao criar pool de conexão MySQL:', error);
+// Inicialização da aplicação
+async function initializeApp() {
+    try {
+        console.log('🔄 Inicializando aplicação...');
+        
+        // Testa conexão com PostgreSQL
+        await db.testConnection();
+        
+        // Inicializa/migra banco de dados
+        await db.initializeDatabase();
+        
+        console.log('✅ Banco de dados inicializado com sucesso!');
+        
+        // Torna a conexão do banco disponível para as rotas
+        app.set('db', db);
+        
+    } catch (error) {
+        console.error('❌ Erro ao inicializar aplicação:', error);
+        console.error('Verifique se o DATABASE_URL está configurado corretamente');
+        process.exit(1);
+    }
 }
 
 // Middleware
@@ -59,9 +70,12 @@ app.use((req, res, next) => {
     next();
 });
 
-// Adiciona header CORS em todas as respostas
+// Headers CORS adicionais
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*'); // Você pode restringir depois para 'http://localhost:3001'
+    const origin = req.headers.origin;
+    if (corsOptions.origin.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -74,11 +88,28 @@ app.use((req, res, next) => {
 });
 
 // Endpoint para verificar se o servidor está funcionando
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Servidor backend funcionando!' });
+app.get('/api/health', async (req, res) => {
+    try {
+        // Testa conexão com banco
+        await db.testConnection();
+        
+        res.json({ 
+            status: 'ok', 
+            message: 'Servidor backend funcionando!',
+            database: 'connected',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development'
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            status: 'error', 
+            message: 'Erro na conexão com banco de dados',
+            error: error.message
+        });
+    }
 });
 
-// Rota separada para listar rotas (mais fácil de acessar)
+// Rota separada para listar rotas (atualizada para PostgreSQL)
 app.get('/api/routes', async (req, res) => {
     try {
         console.log('Listando rotas...');
@@ -89,18 +120,21 @@ app.get('/api/routes', async (req, res) => {
                 r.status,
                 r.total_distance,
                 r.total_duration,
+                r.archived,
+                r.archived_at,
                 COUNT(DISTINCT d.id) as delivery_count,
                 COUNT(DISTINCT CASE WHEN d.status = 'delivered' THEN d.id END) as delivered_count
             FROM routes r 
             LEFT JOIN deliveries d ON r.route_date = d.order_date 
-            GROUP BY r.id 
+            WHERE r.archived = false OR r.archived IS NULL
+            GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, r.archived, r.archived_at
             ORDER BY r.route_date DESC
             LIMIT 30
         `;
         
-        const [rows] = await pool.execute(query);
-        console.log(`Retornando ${rows.length} rotas`);
-        res.json(rows);
+        const result = await db.query(query);
+        console.log(`Retornando ${result.rows.length} rotas`);
+        res.json(result.rows);
     } catch (error) {
         console.error('Erro ao buscar rotas:', error);
         res.status(500).json({ error: error.message });
@@ -111,7 +145,7 @@ app.get('/api/routes', async (req, res) => {
 app.use('/api/deliveries', deliveriesRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/archive', archiveRouter); // <- Rota do arquivo adicionada
+app.use('/api/archive', archiveRouter);
 
 // Endpoint para tratar URLs incorretas
 app.use('*', (req, res) => {
@@ -149,15 +183,25 @@ app.set('socketio', io);
 // Tratamento de erros global
 app.use((err, req, res, next) => {
     console.error('Erro não tratado:', err);
-    res.status(500).json({ error: 'Erro interno do servidor', details: err.message });
+    res.status(500).json({ 
+        error: 'Erro interno do servidor', 
+        details: process.env.NODE_ENV === 'development' ? err.message : 'Erro interno'
+    });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
-    console.log('Configurações carregadas:');
-    console.log(`- DB_HOST: ${process.env.DB_HOST || 'localhost'}`);
-    console.log(`- DB_NAME: ${process.env.DB_NAME || 'confeitaria_entregas'}`);
-    console.log(`- FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
+// Inicializa a aplicação
+initializeApp().then(() => {
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+        console.log(`🚀 Servidor rodando na porta ${PORT}`);
+        console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+        console.log('📊 Configurações carregadas:');
+        console.log(`   - DATABASE_URL: ${process.env.DATABASE_URL ? 'Configurado' : 'NÃO CONFIGURADO'}`);
+        console.log(`   - FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
+        console.log(`   - GOOGLE_MAPS_API_KEY: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configurado' : 'NÃO CONFIGURADO'}`);
+        console.log('🎉 Sistema pronto para uso!');
+    });
+}).catch((error) => {
+    console.error('❌ Falha ao inicializar servidor:', error);
+    process.exit(1);
 });

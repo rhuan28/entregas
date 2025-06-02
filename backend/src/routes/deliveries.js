@@ -1,20 +1,13 @@
-// routes/deliveries.js - Versão atualizada
+// routes/deliveries.js - Versão atualizada para PostgreSQL
 const express = require('express');
 const router = express.Router();
-const mysql = require('mysql2/promise');
 const googleMaps = require('../services/googleMaps');
 const routeOptimization = require('../services/routeOptimization');
 
-// Pool de conexões MySQL
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'confeitaria_entregas',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+// Obtém a instância do banco de dados a partir do app
+function getDb(req) {
+    return req.app.get('db');
+}
 
 // Endereço da confeitaria (depot)
 const CONFEITARIA_ADDRESS = {
@@ -27,24 +20,26 @@ const CONFEITARIA_ADDRESS = {
 router.get('/', async (req, res) => {
     try {
         const { date } = req.query;
+        const db = getDb(req);
+        
         let query = 'SELECT * FROM deliveries';
         let params = [];
         
         if (date) {
-            query += ' WHERE order_date = ?';
+            query += ' WHERE order_date = $1';
             params.push(date);
         } else {
-            query += ' WHERE order_date = CURDATE()';
+            query += ' WHERE order_date = CURRENT_DATE';
         }
         
         query += ' ORDER BY priority DESC';
         
         console.log(`Executando query para buscar entregas: ${query} com data ${date || 'HOJE'}`);
         
-        const [rows] = await pool.execute(query, params);
-        console.log(`Encontradas ${rows.length} entregas`);
+        const result = await db.query(query, params);
+        console.log(`Encontradas ${result.rows.length} entregas`);
         
-        res.json(rows);
+        res.json(result.rows);
     } catch (error) {
         console.error('Erro ao buscar entregas:', error);
         res.status(500).json({ error: error.message });
@@ -55,8 +50,9 @@ router.get('/', async (req, res) => {
 router.get('/routes', async (req, res) => {
     try {
         const { includeArchived = 'false' } = req.query;
+        const db = getDb(req);
         
-        let whereClause = includeArchived === 'true' ? '' : 'WHERE r.archived = FALSE OR r.archived IS NULL';
+        let whereClause = includeArchived === 'true' ? '' : 'WHERE r.archived = false OR r.archived IS NULL';
         
         const query = `
             SELECT 
@@ -72,13 +68,13 @@ router.get('/routes', async (req, res) => {
             FROM routes r 
             LEFT JOIN deliveries d ON r.route_date = d.order_date 
             ${whereClause}
-            GROUP BY r.id 
+            GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, r.archived, r.archived_at
             ORDER BY r.route_date DESC
             LIMIT 30
         `;
         
-        const [rows] = await pool.execute(query);
-        res.json(rows);
+        const result = await db.query(query);
+        res.json(result.rows);
     } catch (error) {
         console.error('Erro ao buscar rotas:', error);
         res.status(500).json({ error: error.message });
@@ -89,38 +85,49 @@ router.get('/routes', async (req, res) => {
 router.delete('/clear/:date', async (req, res) => {
     try {
         const { date } = req.params;
+        const db = getDb(req);
         
         console.log(`Recebendo solicitação para excluir rota da data ${date}`);
         
-        // Primeiro deleta notificações e rastreamento
-        const [notificationResult] = await pool.execute(
-            'DELETE n FROM notifications n JOIN deliveries d ON n.delivery_id = d.id WHERE d.order_date = ?',
-            [date]
-        );
+        // Usar transação para garantir consistência
+        const result = await db.transaction(async (client) => {
+            // Primeiro deleta notificações relacionadas
+            const notificationResult = await client.query(
+                'DELETE FROM notifications WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_date = $1)',
+                [date]
+            );
+            
+            // Deleta os registros de rastreamento relacionados
+            const trackingResult = await client.query(
+                'DELETE FROM tracking WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_date = $1)',
+                [date]
+            );
+            
+            // Deleta as entregas
+            const deliveryResult = await client.query(
+                'DELETE FROM deliveries WHERE order_date = $1',
+                [date]
+            );
+            
+            // Remove a rota
+            const routeResult = await client.query(
+                'DELETE FROM routes WHERE route_date = $1',
+                [date]
+            );
+            
+            return {
+                deliveriesRemoved: deliveryResult.rowCount,
+                routesRemoved: routeResult.rowCount,
+                notificationsRemoved: notificationResult.rowCount,
+                trackingRemoved: trackingResult.rowCount
+            };
+        });
         
-        const [trackingResult] = await pool.execute(
-            'DELETE t FROM tracking t JOIN deliveries d ON t.delivery_id = d.id WHERE d.order_date = ?',
-            [date]
-        );
-        
-        // Deleta as entregas
-        const [deliveryResult] = await pool.execute(
-            'DELETE FROM deliveries WHERE order_date = ?',
-            [date]
-        );
-        
-        // Remove a rota (ao invés de só cancelar)
-        const [routeResult] = await pool.execute(
-            'DELETE FROM routes WHERE route_date = ?',
-            [date]
-        );
-        
-        console.log(`Exclusão concluída. Entregas removidas: ${deliveryResult.affectedRows}, Rotas removidas: ${routeResult.affectedRows}`);
+        console.log(`Exclusão concluída. Entregas removidas: ${result.deliveriesRemoved}, Rotas removidas: ${result.routesRemoved}`);
         
         res.json({ 
             message: 'Rota e entregas removidas com sucesso',
-            deliveriesRemoved: deliveryResult.affectedRows,
-            routesRemoved: routeResult.affectedRows
+            ...result
         });
     } catch (error) {
         console.error('Erro ao limpar entregas:', error);
@@ -136,10 +143,10 @@ router.post('/', async (req, res) => {
             customer_phone, 
             address, 
             product_description, 
-            size = 'M',  // Valor padrão
-            priority = 0,  // Valor padrão 
-            delivery_window_start = null,  // Valor padrão
-            delivery_window_end = null,  // Valor padrão
+            size = 'M',
+            priority = 0,
+            delivery_window_start = null,
+            delivery_window_end = null,
             order_date 
         } = req.body;
         
@@ -170,31 +177,20 @@ router.post('/', async (req, res) => {
         }
         
         console.log('Inserindo entrega no banco de dados...');
-        console.log('Parâmetros:', [
-            effectiveDate,
-            customer_name, 
-            customer_phone || '', // Usa string vazia em vez de undefined
-            coords.formatted_address, 
-            coords.lat, 
-            coords.lng, 
-            product_description, 
-            size || 'M', 
-            priority || 0, 
-            delivery_window_start || null, 
-            delivery_window_end || null
-        ]);
         
-        const [result] = await pool.execute(
+        const db = getDb(req);
+        const result = await db.query(
             `INSERT INTO deliveries (
                 order_date, customer_name, customer_phone, address, 
                 lat, lng, product_description, size, priority, 
                 delivery_window_start, delivery_window_end
             ) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING id`,
             [
                 effectiveDate,
                 customer_name, 
-                customer_phone || '', // Usa string vazia em vez de undefined
+                customer_phone || '',
                 coords.formatted_address, 
                 coords.lat, 
                 coords.lng, 
@@ -206,10 +202,10 @@ router.post('/', async (req, res) => {
             ]
         );
         
-        console.log('Entrega adicionada com sucesso, ID:', result.insertId);
+        console.log('Entrega adicionada com sucesso, ID:', result.rows[0].id);
         
         res.status(201).json({ 
-            id: result.insertId, 
+            id: result.rows[0].id, 
             order_date: effectiveDate,
             ...req.body, 
             ...coords,
@@ -233,35 +229,32 @@ router.post('/optimize', async (req, res) => {
             pickupStops: pickupStops
         });
         
+        const db = getDb(req);
+        
         // Busca configurações
-        const [settingsRows] = await pool.execute(
-            'SELECT * FROM settings WHERE setting_key IN ("circular_route", "origin_address", "stop_time")'
+        const settingsResult = await db.query(
+            'SELECT * FROM settings WHERE setting_key IN ($1, $2, $3)',
+            ['circular_route', 'origin_address', 'stop_time']
         );
         
         const settings = {};
-        settingsRows.forEach(row => {
+        settingsResult.rows.forEach(row => {
             settings[row.setting_key] = row.setting_value;
         });
         
         // Verifica se já existe uma rota para esta data
-        const [existingRoutes] = await pool.execute(
-            'SELECT id FROM routes WHERE route_date = ?',
+        const existingRoutes = await db.query(
+            'SELECT id FROM routes WHERE route_date = $1',
             [routeDate]
         );
-        
-        // Cancela rotas anteriores não finalizadas (não mais necessário se for atualizar)
-        // await pool.execute(
-        //    'UPDATE routes SET status = "cancelled" WHERE route_date = ? AND status IN ("planned", "active")',
-        //    [routeDate]
-        // );
         
         // Busca todas as entregas do dia
-        const [deliveries] = await pool.execute(
-            'SELECT * FROM deliveries WHERE order_date = ? AND status IN ("pending", "optimized") ORDER BY priority DESC, id ASC',
-            [routeDate]
+        const deliveries = await db.query(
+            'SELECT * FROM deliveries WHERE order_date = $1 AND status IN ($2, $3) ORDER BY priority DESC, id ASC',
+            [routeDate, 'pending', 'optimized']
         );
         
-        if (deliveries.length === 0) {
+        if (deliveries.rows.length === 0) {
             return res.json({ message: 'Nenhuma entrega disponível para otimização' });
         }
         
@@ -289,7 +282,7 @@ router.post('/optimize', async (req, res) => {
         }
         
         // Adiciona paradas na confeitaria se solicitado
-        let allStops = [...deliveries];
+        let allStops = [...deliveries.rows];
         
         if (pickupStops && pickupStops.length > 0) {
             console.log('Adicionando paradas na confeitaria:', pickupStops);
@@ -308,9 +301,9 @@ router.post('/optimize', async (req, res) => {
         }
         
         // Volta todas as entregas otimizadas para pendente temporariamente
-        await pool.execute(
-            'UPDATE deliveries SET status = "pending" WHERE order_date = ? AND status = "optimized"',
-            [routeDate]
+        await db.query(
+            'UPDATE deliveries SET status = $1 WHERE order_date = $2 AND status = $3',
+            ['pending', routeDate, 'optimized']
         );
         
         // Otimiza a rota
@@ -319,26 +312,26 @@ router.post('/optimize', async (req, res) => {
         let routeId;
         
         // Atualiza ou cria rota
-        if (existingRoutes.length > 0) {
+        if (existingRoutes.rows.length > 0) {
             // Atualiza rota existente
-            await pool.execute(
-                'UPDATE routes SET total_distance = ?, total_duration = ?, optimized_order = ?, status = "planned" WHERE id = ?',
-                [optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder), existingRoutes[0].id]
+            await db.query(
+                'UPDATE routes SET total_distance = $1, total_duration = $2, optimized_order = $3, status = $4 WHERE id = $5',
+                [optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder), 'planned', existingRoutes.rows[0].id]
             );
-            routeId = existingRoutes[0].id;
+            routeId = existingRoutes.rows[0].id;
         } else {
             // Cria nova rota
-            const [routeResult] = await pool.execute(
-                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES (?, ?, ?, ?)',
+            const routeResult = await db.query(
+                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES ($1, $2, $3, $4) RETURNING id',
                 [routeDate, optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder)]
             );
-            routeId = routeResult.insertId;
+            routeId = routeResult.rows[0].id;
         }
         
         // Atualiza status de todas as entregas incluídas para "optimized"
-        await pool.execute(
-            'UPDATE deliveries SET status = "optimized" WHERE order_date = ? AND status = "pending"',
-            [routeDate]
+        await db.query(
+            'UPDATE deliveries SET status = $1 WHERE order_date = $2 AND status = $3',
+            ['optimized', routeDate, 'pending']
         );
         
         res.json({
@@ -346,7 +339,7 @@ router.post('/optimize', async (req, res) => {
             ...optimizedRoute,
             circularRoute: circularRoute,
             originAddress: originAddress,
-            totalDeliveries: deliveries.length,
+            totalDeliveries: deliveries.rows.length,
             totalStops: allStops.length
         });
     } catch (error) {
@@ -359,15 +352,16 @@ router.post('/optimize', async (req, res) => {
 router.post('/routes/:id/start', async (req, res) => {
     try {
         const { id } = req.params;
+        const db = getDb(req);
         
-        await pool.execute(
-            'UPDATE routes SET status = "active" WHERE id = ?',
-            [id]
+        await db.query(
+            'UPDATE routes SET status = $1 WHERE id = $2',
+            ['active', id]
         );
         
-        await pool.execute(
-            'UPDATE deliveries d JOIN routes r ON r.route_date = d.order_date SET d.status = "in_transit" WHERE r.id = ?',
-            [id]
+        await db.query(
+            'UPDATE deliveries SET status = $1 FROM routes WHERE routes.route_date = deliveries.order_date AND routes.id = $2',
+            ['in_transit', id]
         );
         
         // Notifica clientes via socket
@@ -385,16 +379,17 @@ router.post('/routes/:id/start', async (req, res) => {
 router.post('/:id/complete', async (req, res) => {
     try {
         const { id } = req.params;
+        const db = getDb(req);
         
-        await pool.execute(
-            'UPDATE deliveries SET status = "delivered" WHERE id = ?',
-            [id]
+        await db.query(
+            'UPDATE deliveries SET status = $1 WHERE id = $2',
+            ['delivered', id]
         );
         
         // Adiciona notificação
-        await pool.execute(
-            'INSERT INTO notifications (delivery_id, type, message) VALUES (?, "delivered", "Entrega concluída!")',
-            [id]
+        await db.query(
+            'INSERT INTO notifications (delivery_id, type, message) VALUES ($1, $2, $3)',
+            [id, 'delivered', 'Entrega concluída!']
         );
         
         // Notifica via socket
@@ -412,34 +407,38 @@ router.post('/:id/complete', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const db = getDb(req);
         
         // Verifica se a entrega existe
-        const [delivery] = await pool.execute(
-            'SELECT status FROM deliveries WHERE id = ?',
+        const delivery = await db.query(
+            'SELECT status FROM deliveries WHERE id = $1',
             [id]
         );
         
-        if (delivery.length === 0) {
+        if (delivery.rows.length === 0) {
             return res.status(404).json({ error: 'Entrega não encontrada' });
         }
         
-        // Deleta primeiro as notificações relacionadas
-        await pool.execute(
-            'DELETE FROM notifications WHERE delivery_id = ?',
-            [id]
-        );
-        
-        // Deleta os registros de rastreamento relacionados
-        await pool.execute(
-            'DELETE FROM tracking WHERE delivery_id = ?',
-            [id]
-        );
-        
-        // Agora deleta a entrega
-        await pool.execute(
-            'DELETE FROM deliveries WHERE id = ?',
-            [id]
-        );
+        // Usar transação para deletar em ordem correta
+        await db.transaction(async (client) => {
+            // Deleta primeiro as notificações relacionadas
+            await client.query(
+                'DELETE FROM notifications WHERE delivery_id = $1',
+                [id]
+            );
+            
+            // Deleta os registros de rastreamento relacionados
+            await client.query(
+                'DELETE FROM tracking WHERE delivery_id = $1',
+                [id]
+            );
+            
+            // Agora deleta a entrega
+            await client.query(
+                'DELETE FROM deliveries WHERE id = $1',
+                [id]
+            );
+        });
         
         res.json({ message: 'Entrega excluída com sucesso' });
     } catch (error) {
@@ -460,22 +459,26 @@ router.put('/:id', async (req, res) => {
             priority 
         } = req.body;
         
+        const db = getDb(req);
+        
         // Verifica se a entrega existe
-        const [delivery] = await pool.execute(
-            'SELECT * FROM deliveries WHERE id = ?',
+        const delivery = await db.query(
+            'SELECT * FROM deliveries WHERE id = $1',
             [id]
         );
         
-        if (delivery.length === 0) {
+        if (delivery.rows.length === 0) {
             return res.status(404).json({ error: 'Entrega não encontrada' });
         }
         
-        // Se o endereço foi alterado, precisamos geocodificar novamente
-        let lat = delivery[0].lat;
-        let lng = delivery[0].lng;
-        let formatted_address = delivery[0].address;
+        const existingDelivery = delivery.rows[0];
         
-        if (address && address !== delivery[0].address) {
+        // Se o endereço foi alterado, precisamos geocodificar novamente
+        let lat = existingDelivery.lat;
+        let lng = existingDelivery.lng;
+        let formatted_address = existingDelivery.address;
+        
+        if (address && address !== existingDelivery.address) {
             try {
                 const coords = await googleMaps.geocodeAddress(address);
                 lat = coords.lat;
@@ -488,35 +491,31 @@ router.put('/:id', async (req, res) => {
         }
         
         // Atualiza a entrega
-        await pool.execute(
+        const result = await db.query(
             `UPDATE deliveries SET 
-                customer_name = ?, 
-                customer_phone = ?, 
-                address = ?, 
-                lat = ?, 
-                lng = ?, 
-                product_description = ?, 
-                priority = ?
-            WHERE id = ?`,
+                customer_name = $1, 
+                customer_phone = $2, 
+                address = $3, 
+                lat = $4, 
+                lng = $5, 
+                product_description = $6, 
+                priority = $7,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $8
+            RETURNING *`,
             [
-                customer_name || delivery[0].customer_name,
-                customer_phone || delivery[0].customer_phone,
+                customer_name || existingDelivery.customer_name,
+                customer_phone || existingDelivery.customer_phone,
                 formatted_address,
                 lat,
                 lng,
-                product_description || delivery[0].product_description,
-                priority !== undefined ? priority : delivery[0].priority,
+                product_description || existingDelivery.product_description,
+                priority !== undefined ? priority : existingDelivery.priority,
                 id
             ]
         );
         
-        // Retorna a entrega atualizada
-        const [updatedDelivery] = await pool.execute(
-            'SELECT * FROM deliveries WHERE id = ?',
-            [id]
-        );
-        
-        res.json(updatedDelivery[0]);
+        res.json(result.rows[0]);
     } catch (error) {
         console.error('Erro ao atualizar entrega:', error);
         res.status(500).json({ error: error.message });

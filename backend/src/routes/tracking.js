@@ -1,50 +1,46 @@
-// routes/tracking.js
+// routes/tracking.js - Atualizado para PostgreSQL
 const express = require('express');
 const router = express.Router();
-const mysql = require('mysql2/promise');
 
-// Pool de conexões MySQL
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'confeitaria_entregas',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+// Obtém a instância do banco de dados a partir do app
+function getDb(req) {
+    return req.app.get('db');
+}
 
 // Obtém informações de rastreamento de uma entrega
 router.get('/delivery/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const db = getDb(req);
         
         // Busca informações da entrega
-        const [delivery] = await pool.execute(
-            'SELECT * FROM deliveries WHERE id = ?',
+        const deliveryResult = await db.query(
+            'SELECT * FROM deliveries WHERE id = $1',
             [id]
         );
         
-        if (delivery.length === 0) {
+        if (deliveryResult.rows.length === 0) {
             return res.status(404).json({ error: 'Entrega não encontrada' });
         }
         
+        const delivery = deliveryResult.rows[0];
+        
         // Busca rota ativa
-        const [route] = await pool.execute(
-            'SELECT * FROM routes WHERE route_date = ? AND status = "active"',
-            [delivery[0].order_date]
+        const routeResult = await db.query(
+            'SELECT * FROM routes WHERE route_date = $1 AND status = $2',
+            [delivery.order_date, 'active']
         );
         
         // Busca última localização
-        const [lastLocation] = await pool.execute(
-            'SELECT * FROM tracking WHERE delivery_id = ? ORDER BY timestamp DESC LIMIT 1',
+        const lastLocationResult = await db.query(
+            'SELECT * FROM tracking WHERE delivery_id = $1 ORDER BY timestamp DESC LIMIT 1',
             [id]
         );
         
         res.json({
-            delivery: delivery[0],
-            route: route[0] || null,
-            lastLocation: lastLocation[0] || null
+            delivery: delivery,
+            route: routeResult.rows[0] || null,
+            lastLocation: lastLocationResult.rows[0] || null
         });
     } catch (error) {
         console.error('Erro ao buscar rastreamento:', error);
@@ -56,26 +52,28 @@ router.get('/delivery/:id', async (req, res) => {
 router.post('/location', async (req, res) => {
     try {
         const { routeId, deliveryId, lat, lng } = req.body;
+        const db = getDb(req);
         
-        await pool.execute(
-            'INSERT INTO tracking (route_id, delivery_id, lat, lng) VALUES (?, ?, ?, ?)',
+        await db.query(
+            'INSERT INTO tracking (route_id, delivery_id, lat, lng) VALUES ($1, $2, $3, $4)',
             [routeId, deliveryId, lat, lng]
         );
         
         // Verifica se está próximo do destino (100 metros)
-        const [delivery] = await pool.execute(
-            'SELECT lat, lng FROM deliveries WHERE id = ?',
+        const deliveryResult = await db.query(
+            'SELECT lat, lng FROM deliveries WHERE id = $1',
             [deliveryId]
         );
         
-        if (delivery.length > 0) {
-            const distance = calculateDistance(lat, lng, delivery[0].lat, delivery[0].lng);
+        if (deliveryResult.rows.length > 0) {
+            const delivery = deliveryResult.rows[0];
+            const distance = calculateDistance(lat, lng, delivery.lat, delivery.lng);
             
             if (distance < 0.1) { // 100 metros
                 // Adiciona notificação de aproximação
-                await pool.execute(
-                    'INSERT INTO notifications (delivery_id, type, message) VALUES (?, "approaching", "Entregador chegando!")',
-                    [deliveryId]
+                await db.query(
+                    'INSERT INTO notifications (delivery_id, type, message) VALUES ($1, $2, $3)',
+                    [deliveryId, 'approaching', 'Entregador chegando!']
                 );
                 
                 // Notifica via socket
@@ -94,23 +92,29 @@ router.post('/location', async (req, res) => {
 // Obtém rota ativa
 router.get('/route/active', async (req, res) => {
     try {
-        const [route] = await pool.execute(
-            'SELECT * FROM routes WHERE route_date = CURDATE() AND status = "active" LIMIT 1'
+        const db = getDb(req);
+        
+        const routeResult = await db.query(
+            'SELECT * FROM routes WHERE route_date = CURRENT_DATE AND status = $1 LIMIT 1',
+            ['active']
         );
         
-        if (route.length === 0) {
+        if (routeResult.rows.length === 0) {
             return res.json({ active: false });
         }
         
+        const route = routeResult.rows[0];
+        
         // Busca entregas da rota
-        const [deliveries] = await pool.execute(
-            'SELECT * FROM deliveries WHERE order_date = CURDATE() AND status IN ("in_transit", "delivered") ORDER BY id'
+        const deliveriesResult = await db.query(
+            'SELECT * FROM deliveries WHERE order_date = CURRENT_DATE AND status IN ($1, $2) ORDER BY id',
+            ['in_transit', 'delivered']
         );
         
         res.json({
             active: true,
-            route: route[0],
-            deliveries: deliveries
+            route: route,
+            deliveries: deliveriesResult.rows
         });
     } catch (error) {
         console.error('Erro ao buscar rota ativa:', error);

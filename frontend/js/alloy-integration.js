@@ -5,7 +5,7 @@
  */
 
 // URL base da API
-const API_URL = 'http://localhost:3000/api';
+const API_URL = window.API_URL || 'http://localhost:3000/api';
 
 /**
  * Importa pedidos do Alloy para a data atual
