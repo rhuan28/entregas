@@ -17,7 +17,7 @@ const server = http.createServer(app);
 // Configuração CORS para produção
 const corsOptions = {
     origin: [
-        'https://confeitaria-entregas.vercel.app', // Substitua pela sua URL do Vercel
+        'https://entregas-drab.vercel.app', // Substitua pela sua URL do Vercel
         process.env.FRONTEND_URL,
         'http://localhost:3001', // Para desenvolvimento local
         'http://localhost:3000'  // Para desenvolvimento local
