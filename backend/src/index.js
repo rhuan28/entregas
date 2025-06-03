@@ -18,6 +18,7 @@ const server = http.createServer(app);
 const corsOptions = {
     origin: [
         'https://entregas-drab.vercel.app', // Substitua pela sua URL do Vercel
+        'https://entregas.demiplie.com.br',           // ← NOVO DOMÍNIO
         process.env.FRONTEND_URL,
         'http://localhost:3001', // Para desenvolvimento local
         'http://localhost:3000'  // Para desenvolvimento local
@@ -28,13 +29,21 @@ const corsOptions = {
     optionsSuccessStatus: 200
 };
 
-// Configuração Socket.io
+// Configuração Socket.io com CORS atualizado
 const io = socketIo(server, {
     cors: {
-        origin: corsOptions.origin,
+        origin: [
+            'https://entregas-drab.vercel.app',        // ← ADICIONAR ESTA LINHA
+            'https://entregas.demiplie.com.br',           // ← NOVO DOMÍNIO
+            process.env.FRONTEND_URL,
+            'http://localhost:3001',
+            'http://localhost:3000'
+        ].filter(Boolean), // Remove valores undefined/null
         methods: ['GET', 'POST'],
-        credentials: true
-    }
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization']
+    },
+    allowEIO3: true // Compatibilidade com versões mais antigas
 });
 
 // Inicialização da aplicação
