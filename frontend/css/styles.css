@@ -1524,3 +1524,230 @@ textarea:focus-visible {
         border: 1px solid #ddd !important;
     }
 }
+/* STYLES.CSS - Adicionar estas classes de prioridade */
+
+/* ============================== */
+/* 🔹 STATUS E PRIORIDADE ATUALIZADOS PARA 4 NÍVEIS */
+/* ============================== */
+.priority {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+/* Prioridade Normal (0) - Verde */
+.priority-0 { 
+    background-color: #F6FFED; 
+    color: #52C41A;
+    border: 1px solid #B7EB8F;
+}
+
+/* Prioridade Média (1) - Amarelo */
+.priority-1 { 
+    background-color: #FFF7E6; 
+    color: #FAAD14;
+    border: 1px solid #FFD666;
+}
+
+/* Prioridade Alta (2) - Laranja */
+.priority-2 { 
+    background-color: #FFF2E6; 
+    color: #FD7E14;
+    border: 1px solid #FFAC6B;
+}
+
+/* Prioridade Urgente (3) - Vermelho */
+.priority-3 { 
+    background-color: #FFF2F0; 
+    color: #FF4D4F;
+    border: 1px solid #FFADD2;
+}
+
+/* ============================== */
+/* 🔹 INDICADORES DE PRIORIDADE PARA PRODUTOS */
+/* ============================== */
+.priority-indicator {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.priority-normal {
+    background-color: #F6FFED;
+    color: #52C41A;
+    border: 1px solid #B7EB8F;
+}
+
+.priority-media {
+    background-color: #FFF7E6;
+    color: #FAAD14;
+    border: 1px solid #FFD666;
+}
+
+.priority-alta {
+    background-color: #FFF2E6;
+    color: #FD7E14;
+    border: 1px solid #FFAC6B;
+}
+
+.priority-urgente {
+    background-color: #FFF2F0;
+    color: #FF4D4F;
+    border: 1px solid #FFADD2;
+}
+
+/* ============================== */
+/* 🔹 ANIMAÇÕES PARA PRIORIDADES URGENTES */
+/* ============================== */
+@keyframes priorityPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+.priority-3 {
+    animation: priorityPulse 2s infinite;
+}
+
+.priority-2 {
+    animation: priorityPulse 3s infinite;
+}
+
+/* ============================== */
+/* 🔹 TOOLTIPS DE PRIORIDADE */
+/* ============================== */
+.priority-tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.priority-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    z-index: 1000;
+}
+
+.priority-tooltip:hover::after {
+    opacity: 1;
+}
+
+/* ============================== */
+/* 🔹 LEGENDA DE PRIORIDADES */
+/* ============================== */
+.priority-legend {
+    background: white;
+    padding: 16px;
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 20px;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow);
+}
+
+.priority-legend h4 {
+    margin-bottom: 12px;
+    color: var(--text-dark);
+    font-size: 14px;
+}
+
+.priority-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.priority-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.priority-item .priority-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.priority-item.normal .priority-dot {
+    background-color: #52C41A;
+}
+
+.priority-item.media .priority-dot {
+    background-color: #FAAD14;
+}
+
+.priority-item.alta .priority-dot {
+    background-color: #FD7E14;
+}
+
+.priority-item.urgente .priority-dot {
+    background-color: #FF4D4F;
+}
+
+/* ============================== */
+/* 🔹 CORES PARA MARCADORES DO MAPA */
+/* ============================== */
+.map-marker-normal {
+    background-color: #28a745;
+}
+
+.map-marker-media {
+    background-color: #ffc107;
+}
+
+.map-marker-alta {
+    background-color: #fd7e14;
+}
+
+.map-marker-urgente {
+    background-color: #dc3545;
+}
+
+/* ============================== */
+/* 🔹 RESPONSIVIDADE PARA PRIORIDADES */
+/* ============================== */
+@media (max-width: 768px) {
+    .priority-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .priority-indicator {
+        font-size: 10px;
+        padding: 1px 4px;
+        margin-left: 4px;
+    }
+    
+    .priority {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+    
+    .priority-legend {
+        padding: 12px;
+    }
+}   

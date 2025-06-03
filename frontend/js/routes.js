@@ -1,4 +1,4 @@
-// js/routes.js - Versão atualizada com novos campos
+// js/routes.js - Versão completa atualizada com novos campos e prioridades
 const API_URL = window.API_URL || 'http://localhost:3000/api';
 const socket = io(window.API_CONFIG?.SOCKET_URL || 'http://localhost:3000');
 
@@ -12,16 +12,64 @@ let deliveryData = [];
 let pickupStops = [];
 let manualOrder = {};
 
-// Configuração dos produtos com suas prioridades
+// 🎯 CONFIGURAÇÃO ATUALIZADA DOS PRODUTOS COM NOVAS PRIORIDADES
 const PRODUCT_CONFIG = {
-    'bentocake': { name: 'Bentocake', priority: 0, size: 'P', description: 'Bentocake individual' },
-    '6fatias': { name: '6 fatias', priority: 0, size: 'P', description: 'Bolo de 6 fatias' },
-    '10fatias': { name: '10 fatias', priority: 1, size: 'M', description: 'Bolo de 10 fatias' },
-    '18fatias': { name: '18 fatias', priority: 1, size: 'M', description: 'Bolo de 18 fatias' },
-    '24fatias': { name: '24 fatias', priority: 1, size: 'G', description: 'Bolo de 24 fatias' },
-    '30fatias': { name: '30 fatias', priority: 1, size: 'G', description: 'Bolo de 30 fatias' },
-    '40fatias': { name: '40 fatias', priority: 1, size: 'GG', description: 'Bolo de 40 fatias' },
-    'personalizado': { name: 'Personalizado', priority: 0, size: 'M', description: 'Produto personalizado' }
+    'bentocake': { 
+        name: 'Bentocake', 
+        priority: 0, // Normal 🟢
+        size: 'P', 
+        description: 'Bentocake individual',
+        color: '#28a745'
+    },
+    '6fatias': { 
+        name: '6 fatias', 
+        priority: 1, // Média 🟡
+        size: 'P', 
+        description: 'Bolo de 6 fatias',
+        color: '#ffc107'
+    },
+    '10fatias': { 
+        name: '10 fatias', 
+        priority: 2, // Alta 🟠
+        size: 'M', 
+        description: 'Bolo de 10 fatias',
+        color: '#fd7e14'
+    },
+    '18fatias': { 
+        name: '18 fatias', 
+        priority: 2, // Alta 🟠
+        size: 'M', 
+        description: 'Bolo de 18 fatias',
+        color: '#fd7e14'
+    },
+    '24fatias': { 
+        name: '24 fatias', 
+        priority: 2, // Alta 🟠
+        size: 'G', 
+        description: 'Bolo de 24 fatias',
+        color: '#fd7e14'
+    },
+    '30fatias': { 
+        name: '30 fatias', 
+        priority: 2, // Alta 🟠
+        size: 'G', 
+        description: 'Bolo de 30 fatias',
+        color: '#fd7e14'
+    },
+    '40fatias': { 
+        name: '40 fatias', 
+        priority: 2, // Alta 🟠
+        size: 'GG', 
+        description: 'Bolo de 40 fatias',
+        color: '#fd7e14'
+    },
+    'personalizado': { 
+        name: 'Personalizado', 
+        priority: 0, // Normal 🟢
+        size: 'M', 
+        description: 'Produto personalizado',
+        color: '#28a745'
+    }
 };
 
 let settings = {
@@ -51,6 +99,47 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// 🏷️ FUNÇÃO ATUALIZADA PARA OBTER LABELS DE PRIORIDADE
+function getPriorityLabel(priority) {
+    const labels = { 
+        0: 'Normal', 
+        1: 'Média', 
+        2: 'Alta', 
+        3: 'Urgente' 
+    };
+    return labels[priority] || 'Normal';
+}
+
+// 🎨 FUNÇÃO ATUALIZADA PARA CORES DE PRIORIDADE
+function getPriorityColor(priority) {
+    switch(parseInt(priority)) {
+        case 3: return '#dc3545'; // Vermelho para urgente 🔴
+        case 2: return '#fd7e14'; // Laranja para alta 🟠
+        case 1: return '#ffc107'; // Amarelo para média 🟡
+        default: return '#28a745'; // Verde para normal 🟢
+    }
+}
+
+// 🎯 FUNÇÃO AUXILIAR PARA EMOJIS DE PRIORIDADE
+function getPriorityEmoji(priority) {
+    switch(parseInt(priority)) {
+        case 3: return '🔴'; // Urgente
+        case 2: return '🟠'; // Alta
+        case 1: return '🟡'; // Média
+        default: return '🟢'; // Normal
+    }
+}
+
+// 🏷️ FUNÇÃO AUXILIAR PARA CLASSES CSS DE PRIORIDADE
+function getPriorityClass(priority) {
+    switch(parseInt(priority)) {
+        case 3: return 'urgente';
+        case 2: return 'alta';
+        case 1: return 'media';
+        default: return 'normal';
+    }
+}
+
 // Função para atualizar informações do produto no formulário principal
 function updateProductInfo() {
     const productSelect = document.getElementById('product-select');
@@ -66,7 +155,7 @@ function updateProductInfo() {
             prioritySelect.value = config.priority;
             
             // Se a descrição estiver vazia, preenche com o padrão
-            if (!productDescription.value.trim()) {
+            if (productDescription && !productDescription.value.trim()) {
                 productDescription.value = config.description;
             }
         }
@@ -243,7 +332,7 @@ async function loadDeliveries() {
     }
 }
 
-// Renderiza item de entrega com novos campos
+// 📦 FUNÇÃO ATUALIZADA PARA RENDERIZAR ITENS DE ENTREGA
 function renderDeliveryItem(item, index) {
     if (item.type === 'pickup') {
         return `
@@ -271,13 +360,19 @@ function renderDeliveryItem(item, index) {
         const orderNumberDisplay = item.order_number ? 
             `<p><strong>📋</strong> Pedido #${item.order_number}</p>` : '';
         
+        // 🏷️ Indicador visual de produto com prioridade atualizado
         const productDisplay = item.product_name ? 
-            `<span class="priority-indicator priority-${item.priority === 1 ? 'alta' : 'normal'}">${item.product_name}</span>` : '';
+            `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
+        
+        // 🎯 Emoji baseado na prioridade
+        const priorityEmoji = getPriorityEmoji(item.priority);
         
         return `
             <div class="delivery-header">
                 <h3>${item.customer_name} ${productDisplay}</h3>
-                <span class="priority priority-${item.priority}">${getPriorityLabel(item.priority)}</span>
+                <span class="priority priority-${item.priority}" style="background-color: ${getPriorityColor(item.priority)}; color: white;">
+                    ${priorityEmoji} ${getPriorityLabel(item.priority)}
+                </span>
             </div>
             ${orderNumberDisplay}
             <p><strong>📍</strong> ${item.address}</p>
@@ -454,19 +549,6 @@ async function checkExistingRoute(date) {
 }
 
 // Funções auxiliares
-function getPriorityColor(priority) {
-    switch(parseInt(priority)) {
-        case 2: return '#dc3545'; // Vermelho para urgente
-        case 1: return '#ffc107'; // Amarelo para alta
-        default: return '#28a745'; // Verde para normal
-    }
-}
-
-function getPriorityLabel(priority) {
-    const labels = { 0: 'Normal', 1: 'Alta', 2: 'Urgente' };
-    return labels[priority] || 'Normal';
-}
-
 function getSizeLabel(size) {
     const labels = { 'P': 'Pequeno', 'M': 'Médio', 'G': 'Grande', 'GG': 'Extra Grande' };
     return labels[size] || size;

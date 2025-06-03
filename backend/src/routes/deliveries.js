@@ -1,4 +1,4 @@
-// routes/deliveries.js - Versão atualizada para PostgreSQL com novos campos
+// routes/deliveries.js - Versão corrigida com prioridades conforme tabela fornecida
 const express = require('express');
 const router = express.Router();
 const googleMaps = require('../services/googleMaps');
@@ -16,17 +16,49 @@ const CONFEITARIA_ADDRESS = {
     lng: -47.0640515913573
 };
 
-// Configuração dos produtos com suas prioridades
+// Configuração dos produtos com suas prioridades - CORRIGIDA CONFORME TABELA
 const PRODUCT_CONFIG = {
-    'bentocake': { name: 'Bentocake', priority: 0, size: 'P' },
-    '6fatias': { name: '6 fatias', priority: 0, size: 'P' },
-    '10fatias': { name: '10 fatias', priority: 1, size: 'M' },
-    '18fatias': { name: '18 fatias', priority: 1, size: 'M' },
-    '24fatias': { name: '24 fatias', priority: 1, size: 'G' },
-    '30fatias': { name: '30 fatias', priority: 1, size: 'G' },
-    '40fatias': { name: '40 fatias', priority: 1, size: 'GG' },
-    'personalizado': { name: 'Personalizado', priority: 0, size: 'M' }
+    'bentocake': { name: 'Bentocake', priority: 0, size: 'P' },      // Normal
+    '6fatias': { name: '6 fatias', priority: 1, size: 'P' },        // Média
+    '10fatias': { name: '10 fatias', priority: 2, size: 'M' },      // Alta
+    '18fatias': { name: '18 fatias', priority: 2, size: 'M' },      // Alta
+    '24fatias': { name: '24 fatias', priority: 2, size: 'G' },      // Alta
+    '30fatias': { name: '30 fatias', priority: 2, size: 'G' },      // Alta
+    '40fatias': { name: '40 fatias', priority: 2, size: 'GG' },     // Alta
+    'personalizado': { name: 'Personalizado', priority: 0, size: 'M' } // Normal
 };
+
+// Constantes para facilitar manutenção
+const PRIORITY_LEVELS = {
+    NORMAL: 0,
+    MEDIUM: 1,
+    HIGH: 2,
+    URGENT: 3
+};
+
+const PRIORITY_LABELS = {
+    [PRIORITY_LEVELS.NORMAL]: 'Normal',
+    [PRIORITY_LEVELS.MEDIUM]: 'Média',
+    [PRIORITY_LEVELS.HIGH]: 'Alta',
+    [PRIORITY_LEVELS.URGENT]: 'Urgente'
+};
+
+// Função para validar prioridade
+function validatePriority(priority) {
+    const validPriorities = [0, 1, 2, 3];
+    const numPriority = parseInt(priority);
+    
+    if (!validPriorities.includes(numPriority)) {
+        throw new Error('Prioridade deve ser 0 (Normal), 1 (Média), 2 (Alta) ou 3 (Urgente)');
+    }
+    
+    return numPriority;
+}
+
+// Função para obter label de prioridade
+function getPriorityLabel(priority) {
+    return PRIORITY_LABELS[priority] || 'Normal';
+}
 
 // Lista entregas por data
 router.get('/', async (req, res) => {
@@ -44,6 +76,7 @@ router.get('/', async (req, res) => {
             query += ' WHERE order_date = CURRENT_DATE';
         }
         
+        // Ordena por prioridade (3=Urgente, 2=Alta, 1=Média, 0=Normal)
         query += ' ORDER BY priority DESC, created_at ASC';
         
         console.log(`Executando query para buscar entregas: ${query} com data ${date || 'HOJE'}`);
@@ -173,6 +206,14 @@ router.post('/', async (req, res) => {
             });
         }
         
+        // Valida prioridade
+        let validatedPriority;
+        try {
+            validatedPriority = validatePriority(priority);
+        } catch (error) {
+            return res.status(400).json({ error: error.message });
+        }
+        
         // Data padrão é hoje se não for fornecida
         const effectiveDate = order_date || new Date().toISOString().split('T')[0];
         
@@ -191,23 +232,30 @@ router.post('/', async (req, res) => {
             });
         }
         
-        // Determina o tamanho baseado no tipo de produto se não foi especificado
+        // Determina configurações baseadas no tipo de produto
         let effectiveSize = size;
-        let effectivePriority = priority;
+        let effectivePriority = validatedPriority;
         let effectiveDescription = product_description;
         
         if (product_type && PRODUCT_CONFIG[product_type]) {
             const config = PRODUCT_CONFIG[product_type];
+            
+            // Atualiza tamanho se não foi especificado
             if (!size || size === 'M') {
                 effectiveSize = config.size;
             }
+            
+            // Atualiza prioridade se está no valor padrão (0) - só aplica prioridade do produto se não foi definida manualmente
             if (priority === 0) {
                 effectivePriority = config.priority;
             }
+            
             // Se não foi fornecida descrição, usa a padrão do produto
             if (!effectiveDescription) {
-                effectiveDescription = `${config.name} - ${config.description || 'Produto da confeitaria'}`;
+                effectiveDescription = `${config.name} - Produto da confeitaria`;
             }
+            
+            console.log(`Produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
         }
         
         // Se ainda não tem descrição, usa uma padrão
@@ -215,7 +263,7 @@ router.post('/', async (req, res) => {
             effectiveDescription = product_name || 'Produto da confeitaria';
         }
         
-        console.log('Inserindo entrega no banco de dados...');
+        console.log(`Inserindo entrega no banco de dados com prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})...`);
         
         const db = getDb(req);
         const result = await db.query(
@@ -238,7 +286,7 @@ router.post('/', async (req, res) => {
                 product_type || null,
                 product_name || null,
                 effectiveSize || 'M', 
-                effectivePriority || 0, 
+                effectivePriority, 
                 delivery_window_start || null, 
                 delivery_window_end || null
             ]
@@ -253,6 +301,7 @@ router.post('/', async (req, res) => {
             ...coords,
             size: effectiveSize,
             priority: effectivePriority,
+            priority_label: getPriorityLabel(effectivePriority),
             product_description: effectiveDescription,
             message: 'Entrega adicionada com sucesso' 
         });
@@ -291,6 +340,16 @@ router.put('/:id', async (req, res) => {
         
         const existingDelivery = delivery.rows[0];
         
+        // Valida prioridade se fornecida
+        let validatedPriority = existingDelivery.priority;
+        if (priority !== undefined) {
+            try {
+                validatedPriority = validatePriority(priority);
+            } catch (error) {
+                return res.status(400).json({ error: error.message });
+            }
+        }
+        
         // Se o endereço foi alterado, precisamos geocodificar novamente
         let lat = existingDelivery.lat;
         let lng = existingDelivery.lng;
@@ -308,19 +367,24 @@ router.put('/:id', async (req, res) => {
             }
         }
         
-        // Determina prioridade baseada no tipo de produto se aplicável
-        let effectivePriority = priority !== undefined ? priority : existingDelivery.priority;
+        // Determina configurações baseadas no tipo de produto
+        let effectivePriority = validatedPriority;
         let effectiveDescription = product_description || existingDelivery.product_description;
         
         if (product_type && PRODUCT_CONFIG[product_type]) {
             const config = PRODUCT_CONFIG[product_type];
+            
+            // Se a prioridade não foi definida explicitamente, usa a do produto
             if (priority === undefined) {
                 effectivePriority = config.priority;
             }
+            
             // Se não foi fornecida descrição, atualiza com base no produto
             if (!product_description) {
-                effectiveDescription = `${config.name} - ${config.description || 'Produto da confeitaria'}`;
+                effectiveDescription = `${config.name} - Produto da confeitaria`;
             }
+            
+            console.log(`Atualizando produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
         }
         
         // Atualiza a entrega
@@ -354,7 +418,11 @@ router.put('/:id', async (req, res) => {
             ]
         );
         
-        res.json(result.rows[0]);
+        // Adiciona label de prioridade na resposta
+        const updatedDelivery = result.rows[0];
+        updatedDelivery.priority_label = getPriorityLabel(updatedDelivery.priority);
+        
+        res.json(updatedDelivery);
     } catch (error) {
         console.error('Erro ao atualizar entrega:', error);
         res.status(500).json({ error: error.message });
@@ -392,7 +460,7 @@ router.post('/optimize', async (req, res) => {
             [routeDate]
         );
         
-        // Busca todas as entregas do dia
+        // Busca todas as entregas do dia ordenadas por nova escala de prioridade
         const deliveries = await db.query(
             'SELECT * FROM deliveries WHERE order_date = $1 AND status IN ($2, $3) ORDER BY priority DESC, id ASC',
             [routeDate, 'pending', 'optimized']
@@ -401,6 +469,17 @@ router.post('/optimize', async (req, res) => {
         if (deliveries.rows.length === 0) {
             return res.json({ message: 'Nenhuma entrega disponível para otimização' });
         }
+        
+        // Log das prioridades encontradas
+        const priorityStats = deliveries.rows.reduce((acc, delivery) => {
+            const priority = delivery.priority || 0;
+            acc[priority] = (acc[priority] || 0) + 1;
+            return acc;
+        }, {});
+        
+        console.log('Distribuição de prioridades:', Object.entries(priorityStats).map(([p, count]) => 
+            `${count} ${getPriorityLabel(parseInt(p))}`
+        ).join(', '));
         
         // Define se a rota é circular
         const circularRoute = settings.circular_route === 'true';
@@ -450,7 +529,7 @@ router.post('/optimize', async (req, res) => {
             ['pending', routeDate, 'optimized']
         );
         
-        // Otimiza a rota
+        // Otimiza a rota usando a nova escala de prioridades
         const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder);
         
         let routeId;
@@ -478,13 +557,16 @@ router.post('/optimize', async (req, res) => {
             ['optimized', routeDate, 'pending']
         );
         
+        console.log(`Rota otimizada criada com ${deliveries.rows.length} entregas e ${allStops.length} paradas total`);
+        
         res.json({
             routeId: routeId,
             ...optimizedRoute,
             circularRoute: circularRoute,
             originAddress: originAddress,
             totalDeliveries: deliveries.rows.length,
-            totalStops: allStops.length
+            totalStops: allStops.length,
+            priorityStats: priorityStats
         });
     } catch (error) {
         console.error('Erro na otimização:', error);
@@ -587,6 +669,50 @@ router.delete('/:id', async (req, res) => {
         res.json({ message: 'Entrega excluída com sucesso' });
     } catch (error) {
         console.error('Erro ao deletar entrega:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint para obter estatísticas de prioridades
+router.get('/priority-stats/:date?', async (req, res) => {
+    try {
+        const { date } = req.params;
+        const db = getDb(req);
+        
+        let query = `
+            SELECT 
+                priority,
+                COUNT(*) as count,
+                CASE 
+                    WHEN priority = 0 THEN 'Normal'
+                    WHEN priority = 1 THEN 'Média'
+                    WHEN priority = 2 THEN 'Alta'
+                    WHEN priority = 3 THEN 'Urgente'
+                    ELSE 'Desconhecida'
+                END as label
+            FROM deliveries
+        `;
+        
+        let params = [];
+        
+        if (date) {
+            query += ' WHERE order_date = $1';
+            params.push(date);
+        } else {
+            query += ' WHERE order_date = CURRENT_DATE';
+        }
+        
+        query += ' GROUP BY priority ORDER BY priority DESC';
+        
+        const result = await db.query(query, params);
+        
+        res.json({
+            date: date || new Date().toISOString().split('T')[0],
+            statistics: result.rows,
+            total: result.rows.reduce((sum, row) => sum + parseInt(row.count), 0)
+        });
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas de prioridade:', error);
         res.status(500).json({ error: error.message });
     }
 });

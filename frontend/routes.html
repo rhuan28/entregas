@@ -31,27 +31,6 @@
             box-shadow: 0 0 0 2px rgba(232, 165, 163, 0.1);
         }
         
-        .priority-indicator {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-left: 8px;
-        }
-        
-        .priority-normal {
-            background-color: #F6FFED;
-            color: #52C41A;
-            border: 1px solid #B7EB8F;
-        }
-        
-        .priority-alta {
-            background-color: #FFF7E6;
-            color: #FAAD14;
-            border: 1px solid #FFD666;
-        }
-        
         .order-number-field {
             background-color: #f8f9fa;
             border: 1px solid #e9ecef;
@@ -154,12 +133,12 @@
                             <select id="product-select" name="product_type" class="product-dropdown" onchange="updateProductInfo()">
                                 <option value="">Selecione o produto...</option>
                                 <option value="bentocake" data-priority="0">Bentocake</option>
-                                <option value="6fatias" data-priority="0">6 fatias</option>
-                                <option value="10fatias" data-priority="1">10 fatias</option>
-                                <option value="18fatias" data-priority="1">18 fatias</option>
-                                <option value="24fatias" data-priority="1">24 fatias</option>
-                                <option value="30fatias" data-priority="1">30 fatias</option>
-                                <option value="40fatias" data-priority="1">40 fatias</option>
+                                <option value="6fatias" data-priority="1">6 fatias</option>
+                                <option value="10fatias" data-priority="2">10 fatias</option>
+                                <option value="18fatias" data-priority="2">18 fatias</option>
+                                <option value="24fatias" data-priority="2">24 fatias</option>
+                                <option value="30fatias" data-priority="2">30 fatias</option>
+                                <option value="40fatias" data-priority="2">40 fatias</option>
                                 <option value="personalizado" data-priority="0">Personalizado</option>
                             </select>
                         </div>
@@ -175,8 +154,9 @@
                     <label>PRIORIDADE:</label>
                     <select name="priority" id="priority-select">
                         <option value="0">Normal</option>
-                        <option value="1">Alta</option>
-                        <option value="2">Urgente</option>
+                        <option value="1">Média</option>
+                        <option value="2">Alta</option>
+                        <option value="3">Urgente</option>
                     </select>
                     <small class="setting-description">Definida automaticamente pelo produto, mas pode ser alterada</small>
                 </div>
@@ -214,12 +194,12 @@
                         <select id="edit-product-select" name="product_type" class="product-dropdown" onchange="updateEditProductInfo()">
                             <option value="">Selecione o produto...</option>
                             <option value="bentocake" data-priority="0">Bentocake</option>
-                            <option value="6fatias" data-priority="0">6 fatias</option>
-                            <option value="10fatias" data-priority="1">10 fatias</option>
-                            <option value="18fatias" data-priority="1">18 fatias</option>
-                            <option value="24fatias" data-priority="1">24 fatias</option>
-                            <option value="30fatias" data-priority="1">30 fatias</option>
-                            <option value="40fatias" data-priority="1">40 fatias</option>
+                            <option value="6fatias" data-priority="1">6 fatias</option>
+                            <option value="10fatias" data-priority="2">10 fatias</option>
+                            <option value="18fatias" data-priority="2">18 fatias</option>
+                            <option value="24fatias" data-priority="2">24 fatias</option>
+                            <option value="30fatias" data-priority="2">30 fatias</option>
+                            <option value="40fatias" data-priority="2">40 fatias</option>
                             <option value="personalizado" data-priority="0">Personalizado</option>
                         </select>
                     </div>
@@ -234,8 +214,9 @@
                     <label>PRIORIDADE:</label>
                     <select id="edit-priority-select" name="priority">
                         <option value="0">Normal</option>
-                        <option value="1">Alta</option>
-                        <option value="2">Urgente</option>
+                        <option value="1">Média</option>
+                        <option value="2">Alta</option>
+                        <option value="3">Urgente</option>
                     </select>
                 </div>
                 
@@ -350,15 +331,15 @@
     
     <script src="js/routes.js"></script>
     <script>
-        // Configuração dos produtos com suas prioridades
+        // Configuração dos produtos com suas prioridades CORRIGIDA
         const PRODUCT_CONFIG = {
             'bentocake': { name: 'Bentocake', priority: 0, description: 'Bentocake individual' },
-            '6fatias': { name: '6 fatias', priority: 0, description: 'Bolo de 6 fatias' },
-            '10fatias': { name: '10 fatias', priority: 1, description: 'Bolo de 10 fatias' },
-            '18fatias': { name: '18 fatias', priority: 1, description: 'Bolo de 18 fatias' },
-            '24fatias': { name: '24 fatias', priority: 1, description: 'Bolo de 24 fatias' },
-            '30fatias': { name: '30 fatias', priority: 1, description: 'Bolo de 30 fatias' },
-            '40fatias': { name: '40 fatias', priority: 1, description: 'Bolo de 40 fatias' },
+            '6fatias': { name: '6 fatias', priority: 1, description: 'Bolo de 6 fatias' },
+            '10fatias': { name: '10 fatias', priority: 2, description: 'Bolo de 10 fatias' },
+            '18fatias': { name: '18 fatias', priority: 2, description: 'Bolo de 18 fatias' },
+            '24fatias': { name: '24 fatias', priority: 2, description: 'Bolo de 24 fatias' },
+            '30fatias': { name: '30 fatias', priority: 2, description: 'Bolo de 30 fatias' },
+            '40fatias': { name: '40 fatias', priority: 2, description: 'Bolo de 40 fatias' },
             'personalizado': { name: 'Personalizado', priority: 0, description: 'Produto personalizado' }
         };
 
@@ -367,7 +348,6 @@
             const productSelect = document.getElementById('product-select');
             const selectedOption = productSelect.options[productSelect.selectedIndex];
             const prioritySelect = document.getElementById('priority-select');
-            const productDescription = document.getElementById('product-description');
             
             if (selectedOption.value) {
                 const config = PRODUCT_CONFIG[selectedOption.value];
@@ -375,11 +355,6 @@
                 // Atualiza prioridade
                 if (config) {
                     prioritySelect.value = config.priority;
-                    
-                    // Se a descrição estiver vazia, preenche com o padrão
-                    if (!productDescription.value.trim()) {
-                        productDescription.value = config.description;
-                    }
                 }
             }
         }
@@ -389,7 +364,6 @@
             const productSelect = document.getElementById('edit-product-select');
             const selectedOption = productSelect.options[productSelect.selectedIndex];
             const prioritySelect = document.getElementById('edit-priority-select');
-            const productDescription = document.getElementById('edit-product-description');
             
             if (selectedOption.value) {
                 const config = PRODUCT_CONFIG[selectedOption.value];
@@ -406,7 +380,7 @@
             return PRODUCT_CONFIG[productType]?.name || productType || 'Produto não especificado';
         }
 
-        // Modifica o formulário de entrega para incluir o número do pedido
+        // Formulário de entrega para incluir o número do pedido
         document.getElementById('delivery-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -451,7 +425,7 @@
             }
         });
 
-        // Modifica o formulário de edição para incluir o número do pedido
+        // Formulário de edição para incluir o número do pedido
         document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -498,7 +472,7 @@
             }
         });
 
-        // Modifica a função editDelivery para preencher os novos campos
+        // Função editDelivery para preencher os novos campos
         function editDelivery(id) {
             const delivery = deliveryData.find(d => d.id === id);
             if (!delivery) return;
@@ -528,7 +502,7 @@
             document.getElementById('edit-delivery-container').style.display = 'none';
         }
 
-        // Modifica a renderização da lista de entregas para mostrar o número do pedido
+        // Renderização da lista de entregas para mostrar o número do pedido
         function renderDeliveryItem(item, index) {
             if (item.type === 'pickup') {
                 return `
@@ -554,7 +528,7 @@
                 `;
             } else {
                 const orderNumberDisplay = item.order_number ? `<p><strong>📋</strong> Pedido #${item.order_number}</p>` : '';
-                const productDisplay = item.product_name ? `<span class="priority-indicator priority-${item.priority === 1 ? 'alta' : 'normal'}">${item.product_name}</span>` : '';
+                const productDisplay = item.product_name ? `<span class="priority-indicator priority-${item.priority === 1 ? 'media' : item.priority === 2 ? 'alta' : item.priority === 3 ? 'urgente' : 'normal'}">${item.product_name}</span>` : '';
                 
                 return `
                     <div class="delivery-header">
@@ -598,7 +572,12 @@
 
         // Função auxiliar para obter label de prioridade
         function getPriorityLabel(priority) {
-            const labels = { 0: 'Normal', 1: 'Alta', 2: 'Urgente' };
+            const labels = { 
+                0: 'Normal', 
+                1: 'Média', 
+                2: 'Alta', 
+                3: 'Urgente' 
+            };
             return labels[priority] || 'Normal';
         }
 
@@ -614,6 +593,226 @@
             return labels[status] || status;
         }
 
+        // Função para obter data da URL
+        function getRouteDate() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const date = urlParams.get('date') || new Date().toISOString().split('T')[0];
+            return date;
+        }
+
+        // Função para mostrar toast
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1'};
+                color: ${type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460'};
+                padding: 12px 20px;
+                border-radius: 8px;
+                border: 1px solid ${type === 'success' ? '#c3e6cb' : type === 'error' ? '#f5c6cb' : '#bee5eb'};
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 9999;
+                min-width: 300px;
+                opacity: 0;
+                transform: translateX(100%);
+                transition: all 0.3s ease;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-family: inherit;
+                font-size: 14px;
+                font-weight: 500;
+            `;
+            
+            toast.innerHTML = `
+                <span style="font-size: 16px;">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" style="
+                    background: none;
+                    border: none;
+                    font-size: 18px;
+                    cursor: pointer;
+                    margin-left: auto;
+                    opacity: 0.7;
+                    padding: 0;
+                    width: 20px;
+                    height: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">&times;</button>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Animar entrada
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(0)';
+            }, 10);
+            
+            // Auto-remover após 4 segundos
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (toast.parentElement) {
+                            document.body.removeChild(toast);
+                        }
+                    }, 300);
+                }
+            }, 4000);
+        }
+
+        // Função para adicionar legenda de prioridades
+        function addPriorityLegend() {
+            const deliveriesSection = document.querySelector('.deliveries-section');
+            if (!deliveriesSection || document.querySelector('.priority-legend')) return;
+            
+            const legend = document.createElement('div');
+            legend.className = 'priority-legend';
+            legend.innerHTML = `
+                <h4>📋 Legenda de Prioridades</h4>
+                <div class="priority-list">
+                    <div class="priority-item normal">
+                        <div class="priority-dot"></div>
+                        <span>Normal</span>
+                    </div>
+                    <div class="priority-item media">
+                        <div class="priority-dot"></div>
+                        <span>Média</span>
+                    </div>
+                    <div class="priority-item alta">
+                        <div class="priority-dot"></div>
+                        <span>Alta</span>
+                    </div>
+                    <div class="priority-item urgente">
+                        <div class="priority-dot"></div>
+                        <span>Urgente</span>
+                    </div>
+                </div>
+            `;
+            
+            deliveriesSection.insertBefore(legend, deliveriesSection.firstChild);
+        }
+
+        // Função para adicionar tooltips de prioridade
+        function addPriorityTooltips() {
+            const priorityElements = document.querySelectorAll('.priority');
+            
+            priorityElements.forEach(el => {
+                el.classList.add('priority-tooltip');
+                const priority = el.className.match(/priority-(\d+)/)?.[1];
+                if (priority) {
+                    const tooltips = {
+                        '0': 'Entrega normal - sem urgência',
+                        '1': 'Prioridade média - entregar preferencialmente',
+                        '2': 'Alta prioridade - entregar rapidamente',
+                        '3': 'URGENTE - entregar imediatamente!'
+                    };
+                    el.setAttribute('data-tooltip', tooltips[priority] || '');
+                }
+            });
+        }
+
+        // Função para atualizar estatísticas com contadores de prioridade
+        function updateRouteStats() {
+            if (!window.deliveryData) return;
+            
+            const stats = {
+                total: deliveryData.length,
+                normal: deliveryData.filter(d => d.priority == 0).length,
+                media: deliveryData.filter(d => d.priority == 1).length,
+                alta: deliveryData.filter(d => d.priority == 2).length,
+                urgente: deliveryData.filter(d => d.priority == 3).length
+            };
+            
+            // Atualizar estatísticas básicas
+            if (document.getElementById('total-deliveries')) {
+                document.getElementById('total-deliveries').textContent = stats.total;
+            }
+            
+            // Adicionar contadores de prioridade se não existirem
+            const routeStats = document.querySelector('.route-stats');
+            if (routeStats && !document.querySelector('.priority-stats')) {
+                const priorityStats = document.createElement('div');
+                priorityStats.className = 'priority-stats';
+                priorityStats.style.cssText = `
+                    display: flex;
+                    gap: 10px;
+                    margin-top: 10px;
+                    flex-wrap: wrap;
+                `;
+                
+                priorityStats.innerHTML = `
+                    <div class="priority-stat priority-0" style="padding: 4px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
+                        <span class="count" style="font-weight: bold; font-size: 16px;">${stats.normal}</span>
+                        <span class="label" style="font-size: 10px;">Normal</span>
+                    </div>
+                    <div class="priority-stat priority-1" style="padding: 4px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
+                        <span class="count" style="font-weight: bold; font-size: 16px;">${stats.media}</span>
+                        <span class="label" style="font-size: 10px;">Média</span>
+                    </div>
+                    <div class="priority-stat priority-2" style="padding: 4px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
+                        <span class="count" style="font-weight: bold; font-size: 16px;">${stats.alta}</span>
+                        <span class="label" style="font-size: 10px;">Alta</span>
+                    </div>
+                    <div class="priority-stat priority-3" style="padding: 4px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; align-items: center; min-width: 60px;">
+                        <span class="count" style="font-weight: bold; font-size: 16px;">${stats.urgente}</span>
+                        <span class="label" style="font-size: 10px;">Urgente</span>
+                    </div>
+                `;
+                
+                routeStats.appendChild(priorityStats);
+            } else if (document.querySelector('.priority-stats')) {
+                // Atualizar contadores existentes
+                const normalCount = document.querySelector('.priority-0 .count');
+                const mediaCount = document.querySelector('.priority-1 .count');
+                const altaCount = document.querySelector('.priority-2 .count');
+                const urgenteCount = document.querySelector('.priority-3 .count');
+                
+                if (normalCount) normalCount.textContent = stats.normal;
+                if (mediaCount) mediaCount.textContent = stats.media;
+                if (altaCount) altaCount.textContent = stats.alta;
+                if (urgenteCount) urgenteCount.textContent = stats.urgente;
+            }
+        }
+
+        // Sobrescrever a função loadDeliveries para incluir nossas funcionalidades
+        const originalLoadDeliveries = window.loadDeliveries;
+        if (originalLoadDeliveries) {
+            window.loadDeliveries = function() {
+                originalLoadDeliveries.apply(this, arguments);
+                
+                // Adicionar nossas funcionalidades após carregar
+                setTimeout(() => {
+                    addPriorityLegend();
+                    addPriorityTooltips();
+                    updateRouteStats();
+                }, 100);
+            };
+        }
+
+        // Interceptar mudanças no deliveryData
+        let _deliveryData = [];
+        Object.defineProperty(window, 'deliveryData', {
+            get: function() {
+                return _deliveryData;
+            },
+            set: function(value) {
+                _deliveryData = value;
+                // Atualizar estatísticas quando deliveryData mudar
+                setTimeout(() => {
+                    updateRouteStats();
+                    addPriorityTooltips();
+                }, 50);
+            }
+        });
+
         // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
             // Define a data da rota
@@ -625,34 +824,56 @@
                 month: 'long',
                 day: 'numeric'
             });
-            document.getElementById('route-date').textContent = formattedDate;
+            
+            const routeDateElement = document.getElementById('route-date');
+            if (routeDateElement) {
+                routeDateElement.textContent = formattedDate;
+            }
+            
+            // Adicionar funcionalidades quando a página carregar
+            setTimeout(() => {
+                addPriorityLegend();
+                updateRouteStats();
+            }, 500);
+            
+            // Observer para mudanças no DOM da lista de entregas
+            const deliveriesList = document.getElementById('deliveries-list');
+            if (deliveriesList) {
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList') {
+                            setTimeout(() => {
+                                addPriorityTooltips();
+                                updateRouteStats();
+                            }, 50);
+                        }
+                    });
+                });
+                
+                observer.observe(deliveriesList, {
+                    childList: true,
+                    subtree: true
+                });
+            }
         });
 
-        // Função para obter data da URL
-        function getRouteDate() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const date = urlParams.get('date') || new Date().toISOString().split('T')[0];
-            return date;
-        }
+        // Função global para garantir que as funcionalidades sejam chamadas
+        window.ensurePriorityFeatures = function() {
+            addPriorityLegend();
+            addPriorityTooltips();
+            updateRouteStats();
+        };
 
-        // Função para mostrar toast
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-                <span>${message}</span>
-            `;
-            
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => {
-                    document.body.removeChild(toast);
-                }, 300);
-            }, 3000);
-        }
+        // Chamar funcionalidades a cada 2 segundos para garantir que estejam ativas
+        setInterval(() => {
+            if (document.querySelector('.deliveries-section') && !document.querySelector('.priority-legend')) {
+                addPriorityLegend();
+            }
+            if (document.querySelectorAll('.priority').length > 0) {
+                addPriorityTooltips();
+            }
+            updateRouteStats();
+        }, 2000);
     </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// services/routeOptimization.js - Versão com otimização inteligente por proximidade
+// services/routeOptimization.js - Versão atualizada com prioridade "Média"
 const axios = require('axios');
 require('dotenv').config();
 
@@ -55,7 +55,7 @@ class RouteOptimizationService {
                 return this.handleSingleDeliveryRoute(normalDeliveries, pickupStops, depot, circularRoute, manualOrder);
             }
 
-            // Aplica otimização inteligente
+            // Aplica otimização inteligente com nova escala de prioridades
             console.log('🧠 Aplicando otimização inteligente com análise de desvios...');
             const optimizedOrder = await this.intelligentOptimization(normalDeliveries, depot, manualOrder);
             
@@ -90,24 +90,30 @@ class RouteOptimizationService {
         }
     }
 
-    // Nova função de otimização inteligente
+    // Nova função de otimização inteligente com 4 níveis de prioridade
     async intelligentOptimization(deliveries, depot, manualOrder) {
         console.log('🧠 Iniciando otimização inteligente...');
         
-        // Separa entregas por prioridade
-        const urgentDeliveries = deliveries.filter(d => (d.priority || 0) === 2);
-        const highPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 1);
-        const normalDeliveries = deliveries.filter(d => (d.priority || 0) === 0);
+        // Separa entregas por prioridade conforme tabela:
+        // 0=Normal (Bentocake, Personalizado), 1=Média (6 fatias), 2=Alta (10-40 fatias), 3=Urgente (casos especiais)
+        const urgentDeliveries = deliveries.filter(d => (d.priority || 0) === 3);      // Urgente (casos especiais)
+        const highPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 2); // Alta (10-40 fatias)
+        const mediumPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 1); // Média (6 fatias)
+        const normalDeliveries = deliveries.filter(d => (d.priority || 0) === 0);        // Normal (Bentocake, Personalizado)
         
-        console.log(`📊 Prioridades: ${urgentDeliveries.length} urgentes, ${highPriorityDeliveries.length} altas, ${normalDeliveries.length} normais`);
+        console.log(`📊 Distribuição por prioridade:`);
+        if (urgentDeliveries.length > 0) console.log(`   🚨 ${urgentDeliveries.length} Urgentes (casos especiais)`);
+        if (highPriorityDeliveries.length > 0) console.log(`   ⭐ ${highPriorityDeliveries.length} Altas (bolos 10-40 fatias)`);
+        if (mediumPriorityDeliveries.length > 0) console.log(`   📊 ${mediumPriorityDeliveries.length} Médias (bolos 6 fatias)`);
+        if (normalDeliveries.length > 0) console.log(`   📦 ${normalDeliveries.length} Normais (bentocakes, personalizados)`);
         
         let optimizedRoute = [];
         let remainingDeliveries = [...normalDeliveries];
         let currentPosition = depot;
         
-        // Processa entregas urgentes primeiro
+        // 1º PRIORIDADE: Processa entregas URGENTES (casos especiais - prioridade 3)
         for (const urgentDelivery of urgentDeliveries) {
-            console.log(`🚨 Processando entrega urgente: ${urgentDelivery.customer_name || urgentDelivery.id}`);
+            console.log(`🚨 Processando URGENTE: ${urgentDelivery.customer_name || urgentDelivery.id} (casos especiais)`);
             
             const result = await this.processDeliveryWithDetour(
                 urgentDelivery, 
@@ -121,9 +127,9 @@ class RouteOptimizationService {
             currentPosition = result.lastPosition;
         }
         
-        // Processa entregas de alta prioridade
+        // 2º PRIORIDADE: Processa entregas ALTAS (bolos 10-40 fatias - prioridade 2)
         for (const highPriorityDelivery of highPriorityDeliveries) {
-            console.log(`⭐ Processando entrega de alta prioridade: ${highPriorityDelivery.customer_name || highPriorityDelivery.id}`);
+            console.log(`⭐ Processando ALTA: ${highPriorityDelivery.customer_name || highPriorityDelivery.id} (bolos grandes)`);
             
             const result = await this.processDeliveryWithDetour(
                 highPriorityDelivery, 
@@ -137,9 +143,25 @@ class RouteOptimizationService {
             currentPosition = result.lastPosition;
         }
         
-        // Adiciona entregas normais restantes otimizadas
+        // 3º PRIORIDADE: Processa entregas MÉDIAS (bolos 6 fatias - prioridade 1)
+        for (const mediumPriorityDelivery of mediumPriorityDeliveries) {
+            console.log(`📊 Processando MÉDIA: ${mediumPriorityDelivery.customer_name || mediumPriorityDelivery.id} (6 fatias)`);
+            
+            const result = await this.processDeliveryWithDetour(
+                mediumPriorityDelivery, 
+                remainingDeliveries, 
+                currentPosition, 
+                optimizedRoute.length
+            );
+            
+            optimizedRoute.push(...result.route);
+            remainingDeliveries = result.remaining;
+            currentPosition = result.lastPosition;
+        }
+        
+        // 4º PRIORIDADE: Adiciona entregas NORMAIS restantes (bentocakes, personalizados - prioridade 0)
         if (remainingDeliveries.length > 0) {
-            console.log(`📦 Otimizando ${remainingDeliveries.length} entregas normais restantes...`);
+            console.log(`📦 Otimizando ${remainingDeliveries.length} entregas NORMAIS restantes (bentocakes, personalizados)...`);
             const remainingOptimized = await this.optimizeRemainingDeliveries(
                 remainingDeliveries, 
                 currentPosition, 
@@ -262,39 +284,60 @@ class RouteOptimizationService {
         return { worthwhileDetours };
     }
 
-    // Verifica se um desvio vale a pena
+    // Verifica se um desvio vale a pena (regras específicas conforme tabela de prioridades)
     isDetourWorthwhile(extraDistance, detourRatio, candidatePriority) {
-        // Regras para determinar se vale a pena
+        // Regras específicas para cada tipo de produto conforme tabela:
         const rules = [
-            // Regra 1: Desvio muito pequeno (menos de 500m) sempre vale
+            // Regra 1: Desvio muito pequeno (menos de 500m) sempre vale a pena
             extraDistance < 500,
             
-            // Regra 2: Desvio moderado (até 1.5km) com candidato de prioridade alta
-            extraDistance < 1500 && candidatePriority >= 1,
+            // Regra 2: Para entregas URGENTES (3) - desvio até 2km é aceitável
+            extraDistance < 2000 && candidatePriority === 3,
             
-            // Regra 3: Desvio pequeno (até 1km) com qualquer prioridade
-            extraDistance < 1000,
+            // Regra 3: Para entregas ALTAS (2) - bolos grandes (10-40 fatias) - desvio até 1.5km
+            extraDistance < 1500 && candidatePriority === 2,
             
-            // Regra 4: Até 30% de aumento na distância
+            // Regra 4: Para entregas MÉDIAS (1) - 6 fatias - desvio até 1km
+            extraDistance < 1000 && candidatePriority === 1,
+            
+            // Regra 5: Respeita limite geral de 30% de aumento na distância
             detourRatio <= this.config.maxDetourRatio,
             
-            // Regra 5: Desvio máximo absoluto respeitado
+            // Regra 6: Desvio máximo absoluto respeitado
             extraDistance <= this.config.maxDetourDistance
         ];
         
-        return rules.some(rule => rule);
+        const worthwhile = rules.some(rule => rule);
+        
+        if (worthwhile) {
+            const priorityNames = {0: 'Normal', 1: 'Média', 2: 'Alta', 3: 'Urgente'};
+            console.log(`   ✅ Desvio aprovado para prioridade ${priorityNames[candidatePriority]}: +${(extraDistance/1000).toFixed(1)}km`);
+        }
+        
+        return worthwhile;
     }
 
-    // Calcula valor do desvio (quanto "vale a pena")
+    // Calcula valor do desvio baseado na importância do produto conforme tabela
     calculateDetourValue(extraDistance, candidatePriority) {
-        // Pontuação base pela prioridade (maior prioridade = mais vantajoso)
-        const priorityScore = candidatePriority * 1000;
+        // Pontuação específica por tipo de produto conforme tabela:
+        // Urgente (3): 2400 pontos - casos especiais
+        // Alta (2): 1600 pontos - bolos grandes (10-40 fatias) 
+        // Média (1): 800 pontos - bolos 6 fatias
+        // Normal (0): 0 pontos - bentocakes, personalizados
+        const priorityScore = candidatePriority * 800;
         
         // Penalidade pela distância extra (maior distância = menos vantajoso)
         const distancePenalty = extraDistance;
         
         // Score final (maior = melhor)
-        return priorityScore - distancePenalty;
+        const finalScore = priorityScore - distancePenalty;
+        
+        if (candidatePriority > 0) {
+            const priorityNames = {1: 'Média (6 fatias)', 2: 'Alta (bolos grandes)', 3: 'Urgente (especial)'};
+            console.log(`   📊 Score para ${priorityNames[candidatePriority]}: ${finalScore} (${priorityScore} - ${distancePenalty})`);
+        }
+        
+        return finalScore;
     }
 
     // Calcula distância entre dois pontos usando Google Maps
@@ -319,7 +362,7 @@ class RouteOptimizationService {
             return this.calculateEuclideanDistance(origin, destination);
         } catch (error) {
             console.error('⚠️ Erro ao calcular distância via API:', error.message);
-            return this.calculateEuclidianDistance(origin, destination);
+            return this.calculateEuclideanDistance(origin, destination);
         }
     }
 
