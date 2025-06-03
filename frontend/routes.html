@@ -165,27 +165,28 @@
             </form>
         </div>
         
-        <!-- Área de edição de entrega (inicialmente oculta) -->
+        <!-- Área de edição de entrega (VERSÃO CORRIGIDA) -->
         <div id="edit-delivery-container" style="display: none;" class="form-section">
-            <h2>Editar Entrega</h2>
+            <h2>✏️ Editar Entrega</h2>
             <form id="edit-delivery-form">
                 <input type="hidden" id="edit-delivery-id">
                 
                 <div class="form-row">
                     <div class="form-group">
                         <label>PEDIDO #:</label>
-                        <input type="text" id="edit-order-number" name="order_number" class="order-number-field">
+                        <input type="text" id="edit-order-number" name="order_number" class="order-number-field" placeholder="Ex: 12345">
+                        <small class="setting-description">Número do pedido para controle interno</small>
                     </div>
                     
                     <div class="form-group">
-                        <label>NOME DO CLIENTE:</label>
+                        <label>NOME DO CLIENTE: <span style="color: red;">*</span></label>
                         <input type="text" id="edit-customer-name" name="customer_name" required>
                     </div>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>TELEFONE:</label>
+                        <label>TELEFONE: <span style="color: red;">*</span></label>
                         <input type="tel" id="edit-customer-phone" name="customer_phone" required>
                     </div>
                     
@@ -206,27 +207,34 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>ENDEREÇO:</label>
+                    <label>ENDEREÇO: <span style="color: red;">*</span></label>
                     <input type="text" id="edit-address" name="address" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>DESCRIÇÃO DO PRODUTO:</label>
+                    <textarea id="edit-product-description" name="product_description" rows="2" placeholder="Descrição detalhada do produto"></textarea>
+                    <small class="setting-description">Atualizada automaticamente ao selecionar um produto</small>
                 </div>
                 
                 <div class="form-group">
                     <label>PRIORIDADE:</label>
                     <select id="edit-priority-select" name="priority">
-                        <option value="0">Normal</option>
-                        <option value="1">Média</option>
-                        <option value="2">Alta</option>
-                        <option value="3">Urgente</option>
+                        <option value="0">🟢 Normal</option>
+                        <option value="1">🟡 Média</option>
+                        <option value="2">🟠 Alta</option>
+                        <option value="3">🔴 Urgente</option>
                     </select>
+                    <small class="setting-description">Definida automaticamente pelo produto, mas pode ser alterada</small>
                 </div>
                 
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">SALVAR ALTERAÇÕES</button>
-                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">CANCELAR</button>
+                    <button type="submit" class="btn btn-primary">💾 SALVAR ALTERAÇÕES</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">❌ CANCELAR</button>
                 </div>
             </form>
-        </div>
-        
+        </div>    
+
         <!-- Lista de Entregas -->
         <div class="deliveries-section">
             <div class="deliveries-section-header">
@@ -359,76 +367,159 @@
             }
         }
 
-        // Função para atualizar informações do produto no formulário de edição
+        // Função para atualizar informações do produto no formulário de edição - CORRIGIDA
         function updateEditProductInfo() {
             const productSelect = document.getElementById('edit-product-select');
-            const selectedOption = productSelect.options[productSelect.selectedIndex];
             const prioritySelect = document.getElementById('edit-priority-select');
+            const productDescription = document.getElementById('edit-product-description');
             
-            if (selectedOption.value) {
-                const config = PRODUCT_CONFIG[selectedOption.value];
+            if (!productSelect || !prioritySelect) {
+                console.error('Elementos do formulário de edição não encontrados');
+                return;
+            }
+            
+            const selectedOption = productSelect.options[productSelect.selectedIndex];
+            
+            if (selectedOption && selectedOption.value) {
+                const config = window.PRODUCT_CONFIG && window.PRODUCT_CONFIG[selectedOption.value];
                 
-                // Atualiza prioridade
                 if (config) {
+                    // Atualiza prioridade
                     prioritySelect.value = config.priority;
+                    
+                    // Atualiza descrição se o campo existir e estiver vazio
+                    if (productDescription && !productDescription.value.trim()) {
+                        productDescription.value = config.description || config.name;
+                    }
+                    
+                    console.log(`Produto atualizado: ${config.name}, Prioridade: ${config.priority}`);
                 }
             }
         }
+
+        // Event listener para o formulário de edição - CORRIGIDO
+        document.addEventListener('DOMContentLoaded', function() {
+            const editForm = document.getElementById('edit-delivery-form');
+            
+            if (editForm) {
+                editForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const id = document.getElementById('edit-delivery-id')?.value;
+                    if (!id) {
+                        showToast('Erro: ID da entrega não encontrado', 'error');
+                        return;
+                    }
+                    
+                    // Coleta dados do formulário
+                    const updatedDelivery = {
+                        customer_name: document.getElementById('edit-customer-name')?.value || '',
+                        customer_phone: document.getElementById('edit-customer-phone')?.value || '',
+                        address: document.getElementById('edit-address')?.value || '',
+                        priority: document.getElementById('edit-priority-select')?.value || '0'
+                    };
+                    
+                    // Campos opcionais
+                    const orderNumberEl = document.getElementById('edit-order-number');
+                    if (orderNumberEl) {
+                        updatedDelivery.order_number = orderNumberEl.value;
+                    }
+                    
+                    const productDescEl = document.getElementById('edit-product-description');
+                    if (productDescEl) {
+                        updatedDelivery.product_description = productDescEl.value;
+                    }
+                    
+                    // Informações do produto
+                    const productSelect = document.getElementById('edit-product-select');
+                    if (productSelect && productSelect.value) {
+                        updatedDelivery.product_type = productSelect.value;
+                        
+                        if (window.getProductDisplayName) {
+                            updatedDelivery.product_name = window.getProductDisplayName(productSelect.value);
+                        }
+                        
+                        // Atualiza descrição automaticamente se não foi preenchida
+                        const config = window.PRODUCT_CONFIG && window.PRODUCT_CONFIG[productSelect.value];
+                        if (config && (!updatedDelivery.product_description || !updatedDelivery.product_description.trim())) {
+                            updatedDelivery.product_description = config.description || config.name;
+                        }
+                    }
+                    
+                    try {
+                        const API_URL = window.API_URL || 'http://localhost:3000/api';
+                        const response = await fetch(`${API_URL}/deliveries/${id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(updatedDelivery)
+                        });
+                        
+                        if (response.ok) {
+                            if (window.showToast) {
+                                window.showToast('Entrega atualizada com sucesso!', 'success');
+                            }
+                            
+                            // Cancela edição
+                            if (window.cancelEdit) {
+                                window.cancelEdit();
+                            }
+                            
+                            // Recarrega entregas
+                            if (window.loadDeliveries) {
+                                window.loadDeliveries();
+                            }
+                        } else {
+                            const data = await response.json();
+                            throw new Error(data.error || 'Erro ao atualizar entrega');
+                        }
+                    } catch (error) {
+                        console.error('Erro ao atualizar entrega:', error);
+                        if (window.showToast) {
+                            window.showToast('Erro ao atualizar entrega: ' + error.message, 'error');
+                        }
+                    }
+                });
+                
+                console.log('Event listener do formulário de edição registrado');
+            } else {
+                console.error('Formulário de edição não encontrado no DOM');
+            }
+        });
+
+        // Função de teste para verificar se todos os elementos existem
+        function testEditFormElements() {
+            const elements = [
+                'edit-delivery-container',
+                'edit-delivery-form', 
+                'edit-delivery-id',
+                'edit-customer-name',
+                'edit-customer-phone',
+                'edit-address',
+                'edit-priority-select'
+            ];
+            
+            console.log('=== TESTE: Elementos do formulário de edição ===');
+            let allFound = true;
+            
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                const found = !!element;
+                console.log(`✓ ${id}: ${found ? 'OK' : 'FALTANDO'}`);
+                if (!found) allFound = false;
+            });
+            
+            console.log(`Status geral: ${allFound ? 'TODOS ENCONTRADOS' : 'ALGUNS ELEMENTOS FALTANDO'}`);
+            return allFound;
+        }
+
+        // Disponibiliza globalmente
+        window.updateEditProductInfo = updateEditProductInfo;
+        window.testEditFormElements = testEditFormElements;
 
         // Função para obter o nome do produto baseado no tipo
         function getProductDisplayName(productType) {
             return PRODUCT_CONFIG[productType]?.name || productType || 'Produto não especificado';
         }
-
-        // Formulário de entrega para incluir o número do pedido (CORRIGIDO)
-        document.getElementById('delivery-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const delivery = Object.fromEntries(formData);
-            delivery.order_date = getRouteDate();
-            
-            // Adiciona informações do produto
-            const productSelect = document.getElementById('product-select');
-            if (productSelect.value) {
-                delivery.product_type = productSelect.value;
-                delivery.product_name = getProductDisplayName(productSelect.value);
-                
-                // Define descrição do produto automaticamente baseada no tipo
-                const config = PRODUCT_CONFIG[productSelect.value];
-                if (config) {
-                    delivery.product_description = config.description;
-                }
-            } else {
-                // Se não selecionou produto, usar descrição padrão
-                delivery.product_description = 'Produto não especificado';
-                delivery.product_name = 'Produto não especificado';
-            }
-            
-            try {
-                const response = await fetch(`${window.API_URL || API_URL}/deliveries`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(delivery)
-                });
-                
-                if (response.ok) {
-                    showToast('Entrega adicionada com sucesso!', 'success');
-                    e.target.reset();
-                    if (window.loadDeliveries) {
-                        window.loadDeliveries();
-                    } else {
-                        loadDeliveries();
-                    }
-                } else {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Erro ao adicionar entrega');
-                }
-            } catch (error) {
-                console.error('Erro ao adicionar entrega:', error);
-                showToast('Erro ao adicionar entrega: ' + error.message, 'error');
-            }
-        });
 
         // Formulário de edição para incluir o número do pedido (CORRIGIDO)
         document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
@@ -940,6 +1031,263 @@
             }
             updateRouteStats();
         }, 2000);
+    </script>
+    <!-- Adicione este script ao final do routes.html, antes da tag </body> -->
+    <script>
+    // ========================================
+    // CORREÇÃO FINAL PARA O BOTÃO EDITAR
+    // ========================================
+
+    console.log('🔧 Aplicando correção final para o formulário de edição...');
+
+    // Remove conflitos e garante uma única implementação
+    (function() {
+        'use strict';
+        
+        // 1. Função editDelivery definitiva e robusta
+        function editDeliveryFinal(id) {
+            console.log(`🎯 Editando entrega ID: ${id}`);
+            
+            // Verifica dados
+            const dados = window.deliveryData || deliveryData || [];
+            console.log(`📊 Total de entregas disponíveis: ${dados.length}`);
+            
+            const entrega = dados.find(d => d.id == id);
+            if (!entrega) {
+                console.error(`❌ Entrega ${id} não encontrada nos dados:`, dados.map(d => d.id));
+                showToast('Entrega não encontrada!', 'error');
+                return;
+            }
+            
+            console.log(`✅ Entrega encontrada:`, entrega);
+            
+            // Lista de elementos necessários
+            const elementos = {
+                container: document.getElementById('edit-delivery-container'),
+                form: document.getElementById('edit-delivery-form'),
+                id: document.getElementById('edit-delivery-id'),
+                orderNumber: document.getElementById('edit-order-number'),
+                customerName: document.getElementById('edit-customer-name'),
+                customerPhone: document.getElementById('edit-customer-phone'),
+                address: document.getElementById('edit-address'),
+                productDescription: document.getElementById('edit-product-description'),
+                priority: document.getElementById('edit-priority-select'),
+                productSelect: document.getElementById('edit-product-select')
+            };
+            
+            // Verifica elementos críticos
+            const elementosCriticos = ['container', 'form', 'id', 'customerName', 'customerPhone', 'address', 'priority'];
+            const faltando = elementosCriticos.filter(key => !elementos[key]);
+            
+            if (faltando.length > 0) {
+                console.error(`❌ Elementos críticos faltando:`, faltando);
+                showToast(`Erro: elementos ${faltando.join(', ')} não encontrados`, 'error');
+                return;
+            }
+            
+            try {
+                // Preenche campos obrigatórios
+                elementos.id.value = entrega.id || '';
+                elementos.customerName.value = entrega.customer_name || '';
+                elementos.customerPhone.value = entrega.customer_phone || '';
+                elementos.address.value = entrega.address || '';
+                elementos.priority.value = entrega.priority || '0';
+                
+                // Preenche campos opcionais
+                if (elementos.orderNumber) {
+                    elementos.orderNumber.value = entrega.order_number || '';
+                }
+                
+                if (elementos.productDescription) {
+                    elementos.productDescription.value = entrega.product_description || '';
+                }
+                
+                if (elementos.productSelect && entrega.product_type) {
+                    elementos.productSelect.value = entrega.product_type;
+                    
+                    // Atualiza prioridade baseada no produto
+                    if (typeof updateEditProductInfo === 'function') {
+                        updateEditProductInfo();
+                    }
+                }
+                
+                // Exibe o formulário
+                elementos.container.style.display = 'block';
+                
+                // Rola para o formulário
+                setTimeout(() => {
+                    elementos.container.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start' 
+                    });
+                }, 100);
+                
+                console.log('✅ Formulário preenchido e exibido com sucesso!');
+                
+            } catch (error) {
+                console.error('❌ Erro ao preencher formulário:', error);
+                showToast('Erro ao carregar dados da entrega: ' + error.message, 'error');
+            }
+        }
+        
+        // 2. Função cancelEdit definitiva
+        function cancelEditFinal() {
+            const container = document.getElementById('edit-delivery-container');
+            if (container) {
+                container.style.display = 'none';
+                
+                // Limpa o formulário
+                const form = document.getElementById('edit-delivery-form');
+                if (form) {
+                    form.reset();
+                }
+                
+                console.log('✅ Edição cancelada e formulário limpo');
+            }
+        }
+        
+        // 3. Remove event listeners duplicados e adiciona um único
+        function configurarEventListenerUnico() {
+            const form = document.getElementById('edit-delivery-form');
+            if (!form) {
+                console.error('❌ Formulário de edição não encontrado');
+                return;
+            }
+            
+            // Remove todos os event listeners existentes clonando o elemento
+            const novoForm = form.cloneNode(true);
+            form.parentNode.replaceChild(novoForm, form);
+            
+            // Adiciona um único event listener
+            novoForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                console.log('📝 Processando envio do formulário de edição...');
+                
+                const id = document.getElementById('edit-delivery-id')?.value;
+                if (!id) {
+                    console.error('❌ ID da entrega não encontrado');
+                    showToast('Erro: ID da entrega não encontrado', 'error');
+                    return;
+                }
+                
+                // Coleta dados do formulário
+                const dadosAtualizados = {
+                    customer_name: document.getElementById('edit-customer-name')?.value || '',
+                    customer_phone: document.getElementById('edit-customer-phone')?.value || '',
+                    address: document.getElementById('edit-address')?.value || '',
+                    priority: document.getElementById('edit-priority-select')?.value || '0'
+                };
+                
+                // Campos opcionais
+                const orderNumber = document.getElementById('edit-order-number')?.value;
+                if (orderNumber) dadosAtualizados.order_number = orderNumber;
+                
+                const productDesc = document.getElementById('edit-product-description')?.value;
+                if (productDesc) dadosAtualizados.product_description = productDesc;
+                
+                const productType = document.getElementById('edit-product-select')?.value;
+                if (productType) {
+                    dadosAtualizados.product_type = productType;
+                    if (window.PRODUCT_CONFIG && window.PRODUCT_CONFIG[productType]) {
+                        dadosAtualizados.product_name = window.PRODUCT_CONFIG[productType].name;
+                        
+                        // Se descrição não foi preenchida, usa a do produto
+                        if (!dadosAtualizados.product_description) {
+                            dadosAtualizados.product_description = window.PRODUCT_CONFIG[productType].description;
+                        }
+                    }
+                }
+                
+                try {
+                    const API_URL = window.API_URL || 'http://localhost:3000/api';
+                    console.log(`📡 Enviando dados para: ${API_URL}/deliveries/${id}`);
+                    
+                    const response = await fetch(`${API_URL}/deliveries/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(dadosAtualizados)
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ Entrega atualizada com sucesso!');
+                        showToast('Entrega atualizada com sucesso!', 'success');
+                        
+                        // Cancela edição
+                        cancelEditFinal();
+                        
+                        // Recarrega entregas
+                        if (window.loadDeliveries) {
+                            window.loadDeliveries();
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Erro ${response.status}`);
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao atualizar entrega:', error);
+                    showToast('Erro ao atualizar entrega: ' + error.message, 'error');
+                }
+            });
+            
+            console.log('✅ Event listener único configurado');
+        }
+        
+        // 4. Substitui as funções globais
+        window.editDelivery = editDeliveryFinal;
+        window.cancelEdit = cancelEditFinal;
+        
+        // 5. Configura event listener único
+        configurarEventListenerUnico();
+        
+        // 6. Função de teste para verificar se tudo está funcionando
+        window.testarEdicao = function() {
+            console.log('\n🧪 TESTE DO SISTEMA DE EDIÇÃO');
+            
+            // Verifica elementos
+            const elementos = [
+                'edit-delivery-container',
+                'edit-delivery-form',
+                'edit-delivery-id',
+                'edit-customer-name',
+                'edit-customer-phone',
+                'edit-address',
+                'edit-priority-select'
+            ];
+            
+            let todosOK = true;
+            elementos.forEach(id => {
+                const el = document.getElementById(id);
+                const status = el ? '✅ OK' : '❌ FALTANDO';
+                console.log(`${id}: ${status}`);
+                if (!el) todosOK = false;
+            });
+            
+            // Verifica dados
+            const dados = window.deliveryData || deliveryData || [];
+            console.log(`📊 Entregas disponíveis: ${dados.length}`);
+            
+            // Verifica funções
+            console.log(`🔧 editDelivery: ${typeof window.editDelivery === 'function' ? '✅ OK' : '❌ FALTANDO'}`);
+            console.log(`🔧 cancelEdit: ${typeof window.cancelEdit === 'function' ? '✅ OK' : '❌ FALTANDO'}`);
+            
+            if (todosOK && dados.length > 0) {
+                console.log('🎉 Sistema de edição está funcionando corretamente!');
+                return true;
+            } else {
+                console.log('⚠️ Sistema de edição tem problemas');
+                return false;
+            }
+        };
+        
+        console.log('✅ Correção final aplicada!');
+        console.log('💡 Para testar: window.testarEdicao()');
+        
+        // Auto-teste após 1 segundo
+        setTimeout(() => {
+            window.testarEdicao();
+        }, 1000);
+        
+    })();
     </script>
 </body>
 </html>

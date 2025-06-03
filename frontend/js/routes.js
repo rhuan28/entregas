@@ -456,34 +456,202 @@ function updateMapMarkers(allItems) {
     });
 }
 
-// Função para editar uma entrega existente
+// Função para editar uma entrega existente - VERSÃO CORRIGIDA
 function editDelivery(id) {
-    const delivery = deliveryData.find(d => d.id === id);
-    if (!delivery) return;
+    console.log('Tentando editar entrega com ID:', id);
     
-    // Preenche o formulário
-    document.getElementById('edit-delivery-id').value = delivery.id;
-    document.getElementById('edit-order-number').value = delivery.order_number || '';
-    document.getElementById('edit-customer-name').value = delivery.customer_name;
-    document.getElementById('edit-customer-phone').value = delivery.customer_phone;
-    document.getElementById('edit-address').value = delivery.address;
-    document.getElementById('edit-product-description').value = delivery.product_description;
-    document.getElementById('edit-priority-select').value = delivery.priority;
-    
-    // Define o produto se existir
-    if (delivery.product_type) {
-        document.getElementById('edit-product-select').value = delivery.product_type;
+    // Verifica se deliveryData existe e está populado
+    if (!window.deliveryData || window.deliveryData.length === 0) {
+        console.error('deliveryData não está disponível');
+        showToast('Erro: dados das entregas não carregados', 'error');
+        return;
     }
     
-    // Mostra o formulário de edição
-    document.getElementById('edit-delivery-container').style.display = 'block';
-    document.getElementById('edit-delivery-container').scrollIntoView({ behavior: 'smooth' });
+    // Procura a entrega pelo ID
+    const delivery = window.deliveryData.find(d => d.id == id);
+    if (!delivery) {
+        console.error('Entrega não encontrada:', id);
+        showToast('Entrega não encontrada!', 'error');
+        return;
+    }
+    
+    console.log('Entrega encontrada:', delivery);
+    
+    // Verifica se todos os elementos do formulário de edição existem
+    const editElements = {
+        container: document.getElementById('edit-delivery-container'),
+        id: document.getElementById('edit-delivery-id'),
+        orderNumber: document.getElementById('edit-order-number'),
+        customerName: document.getElementById('edit-customer-name'),
+        customerPhone: document.getElementById('edit-customer-phone'),
+        address: document.getElementById('edit-address'),
+        productDescription: document.getElementById('edit-product-description'),
+        priority: document.getElementById('edit-priority-select'),
+        productSelect: document.getElementById('edit-product-select')
+    };
+    
+    // Lista dos elementos obrigatórios
+    const requiredElements = ['container', 'id', 'customerName', 'customerPhone', 'address', 'priority'];
+    
+    // Verifica se os elementos obrigatórios existem
+    for (const elementName of requiredElements) {
+        if (!editElements[elementName]) {
+            console.error(`Elemento obrigatório '${elementName}' não encontrado no DOM`);
+            showToast(`Erro no formulário: elemento '${elementName}' não encontrado`, 'error');
+            return;
+        }
+    }
+    
+    try {
+        // Preenche os campos obrigatórios
+        editElements.id.value = delivery.id || '';
+        editElements.customerName.value = delivery.customer_name || '';
+        editElements.customerPhone.value = delivery.customer_phone || '';
+        editElements.address.value = delivery.address || '';
+        editElements.priority.value = delivery.priority || '0';
+        
+        // Preenche campos opcionais apenas se existirem
+        if (editElements.orderNumber) {
+            editElements.orderNumber.value = delivery.order_number || '';
+        }
+        
+        if (editElements.productDescription) {
+            editElements.productDescription.value = delivery.product_description || '';
+        }
+        
+        // Define o produto se existir
+        if (editElements.productSelect && delivery.product_type) {
+            editElements.productSelect.value = delivery.product_type;
+            // Atualiza a prioridade baseada no produto
+            if (typeof updateEditProductInfo === 'function') {
+                updateEditProductInfo();
+            }
+        }
+        
+        // Mostra o formulário de edição
+        editElements.container.style.display = 'block';
+        
+        // Rola para o formulário com um pequeno delay para garantir que seja visível
+        setTimeout(() => {
+            editElements.container.scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }, 100);
+        
+        console.log('Formulário de edição preenchido e exibido com sucesso');
+        
+    } catch (error) {
+        console.error('Erro ao preencher formulário de edição:', error);
+        showToast('Erro ao carregar dados da entrega para edição', 'error');
+    }
 }
 
-// Função para cancelar a edição
+// Função para cancelar edição - VERSÃO MELHORADA
 function cancelEdit() {
-    document.getElementById('edit-delivery-container').style.display = 'none';
+    const editContainer = document.getElementById('edit-delivery-container');
+    if (editContainer) {
+        editContainer.style.display = 'none';
+        
+        // Limpa o formulário
+        const editForm = document.getElementById('edit-delivery-form');
+        if (editForm) {
+            editForm.reset();
+        }
+        
+        console.log('Edição cancelada e formulário limpo');
+    } else {
+        console.error('Container de edição não encontrado para cancelar');
+    }
 }
+
+// Função de segurança para verificar se o DOM está carregado
+function ensureDOMReady(callback) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', callback);
+    } else {
+        callback();
+    }
+}
+
+// Função melhorada para atualizar deliveryData e garantir acessibilidade global
+function setDeliveryData(data) {
+    // Define no window para acesso global
+    window.deliveryData = data;
+    
+    // Também define como variável global para compatibilidade
+    if (typeof deliveryData !== 'undefined') {
+        deliveryData = data;
+    }
+    
+    console.log('deliveryData atualizado:', data.length, 'entregas');
+}
+
+// Wrapper para a função loadDeliveries original que garante que deliveryData seja acessível
+function wrapLoadDeliveries() {
+    if (typeof window.originalLoadDeliveries === 'undefined' && typeof loadDeliveries === 'function') {
+        // Salva a função original
+        window.originalLoadDeliveries = loadDeliveries;
+        
+        // Substitui por uma versão que garante acessibilidade dos dados
+        window.loadDeliveries = async function() {
+            try {
+                await window.originalLoadDeliveries();
+                
+                // Garante que deliveryData esteja acessível globalmente
+                if (typeof deliveryData !== 'undefined') {
+                    window.deliveryData = deliveryData;
+                }
+                
+                console.log('loadDeliveries executado, deliveryData disponível:', window.deliveryData?.length || 0);
+            } catch (error) {
+                console.error('Erro no loadDeliveries wrapper:', error);
+            }
+        };
+    }
+}
+
+// Função para debugar problemas de elementos não encontrados
+function debugFormElements() {
+    const expectedElements = [
+        'edit-delivery-container',
+        'edit-delivery-id', 
+        'edit-order-number',
+        'edit-customer-name',
+        'edit-customer-phone', 
+        'edit-address',
+        'edit-product-description',
+        'edit-priority-select',
+        'edit-product-select'
+    ];
+    
+    console.log('=== DEBUG: Verificando elementos do formulário de edição ===');
+    expectedElements.forEach(id => {
+        const element = document.getElementById(id);
+        console.log(`${id}: ${element ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+    });
+    console.log('=== FIM DEBUG ===');
+}
+
+// Inicialização que garante compatibilidade
+ensureDOMReady(() => {
+    // Wraps a função loadDeliveries se existir
+    wrapLoadDeliveries();
+    
+    // Disponibiliza funções globalmente
+    window.editDelivery = editDelivery;
+    window.cancelEdit = cancelEdit;
+    window.setDeliveryData = setDeliveryData;
+    window.debugFormElements = debugFormElements;
+    
+    console.log('Funções de edição inicializadas e disponíveis globalmente');
+    
+    // Debug opcional - remova em produção
+    if (window.location.hostname === 'localhost') {
+        window.debugFormElements = debugFormElements;
+        console.log('Debug disponível: window.debugFormElements()');
+    }
+});
 
 // Atualiza ordem manual
 function updateManualOrder(itemId, order) {
