@@ -106,6 +106,8 @@ router.get('/routes', async (req, res) => {
                 r.status,
                 r.total_distance,
                 r.total_duration,
+                r.optimized_order,
+                r.route_config,
                 r.archived,
                 r.archived_at,
                 COUNT(DISTINCT d.id) as delivery_count,
@@ -113,15 +115,93 @@ router.get('/routes', async (req, res) => {
             FROM routes r 
             LEFT JOIN deliveries d ON r.route_date = d.order_date 
             ${whereClause}
-            GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, r.archived, r.archived_at
+            GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, 
+                     r.optimized_order, r.route_config, r.archived, r.archived_at
             ORDER BY r.route_date DESC
             LIMIT 30
         `;
         
         const result = await db.query(query);
-        res.json(result.rows);
+        
+        // Parse JSON fields safely
+        const routesWithParsedData = result.rows.map(route => ({
+            ...route,
+            optimized_order: route.optimized_order ? 
+                (typeof route.optimized_order === 'string' ? 
+                    JSON.parse(route.optimized_order) : route.optimized_order) : null,
+            route_config: route.route_config ? 
+                (typeof route.route_config === 'string' ? 
+                    JSON.parse(route.route_config) : route.route_config) : null
+        }));
+        
+        res.json(routesWithParsedData);
     } catch (error) {
         console.error('Erro ao buscar rotas:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Busca rota específica por data
+router.get('/routes/:date', async (req, res) => {
+    try {
+        const { date } = req.params;
+        const db = getDb(req);
+        
+        console.log(`Buscando rota para data: ${date}`);
+        
+        const query = `
+            SELECT 
+                r.id,
+                r.route_date,
+                r.status,
+                r.total_distance,
+                r.total_duration,
+                r.optimized_order,
+                r.route_config,
+                r.archived,
+                r.archived_at,
+                COUNT(DISTINCT d.id) as delivery_count,
+                COUNT(DISTINCT CASE WHEN d.status = 'delivered' THEN d.id END) as delivered_count
+            FROM routes r 
+            LEFT JOIN deliveries d ON r.route_date = d.order_date 
+            WHERE r.route_date = $1
+            GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, 
+                     r.optimized_order, r.route_config, r.archived, r.archived_at
+        `;
+        
+        const result = await db.query(query, [date]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                error: 'Rota não encontrada para esta data',
+                date: date 
+            });
+        }
+        
+        const route = result.rows[0];
+        
+        // Parse JSON fields safely
+        const routeWithParsedData = {
+            ...route,
+            optimized_order: route.optimized_order ? 
+                (typeof route.optimized_order === 'string' ? 
+                    JSON.parse(route.optimized_order) : route.optimized_order) : null,
+            route_config: route.route_config ? 
+                (typeof route.route_config === 'string' ? 
+                    JSON.parse(route.route_config) : route.route_config) : null
+        };
+        
+        console.log(`Rota encontrada para ${date}:`, {
+            id: route.id,
+            status: route.status,
+            deliveries: route.delivery_count,
+            hasOptimizedOrder: !!routeWithParsedData.optimized_order,
+            hasRouteConfig: !!routeWithParsedData.route_config
+        });
+        
+        res.json(routeWithParsedData);
+    } catch (error) {
+        console.error('Erro ao buscar rota específica:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -387,9 +467,14 @@ router.put('/:id', async (req, res) => {
             console.log(`Atualizando produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
         }
         
-        // Atualiza a entrega
-        const result = await db.query(
-            `UPDATE deliveries SET 
+        // Verifica se a coluna updated_at existe antes de usá-la
+        const hasUpdatedAt = await checkColumnExists('deliveries', 'updated_at');
+        
+        let updateQuery;
+        let queryParams;
+        
+        if (hasUpdatedAt) {
+            updateQuery = `UPDATE deliveries SET 
                 order_number = $1,
                 customer_name = $2, 
                 customer_phone = $3, 
@@ -402,21 +487,39 @@ router.put('/:id', async (req, res) => {
                 priority = $10,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $11
-            RETURNING *`,
-            [
-                order_number || existingDelivery.order_number,
-                customer_name || existingDelivery.customer_name,
-                customer_phone || existingDelivery.customer_phone,
-                formatted_address,
-                lat,
-                lng,
-                effectiveDescription,
-                product_type || existingDelivery.product_type,
-                product_name || existingDelivery.product_name,
-                effectivePriority,
-                id
-            ]
-        );
+            RETURNING *`;
+        } else {
+            updateQuery = `UPDATE deliveries SET 
+                order_number = $1,
+                customer_name = $2, 
+                customer_phone = $3, 
+                address = $4, 
+                lat = $5, 
+                lng = $6, 
+                product_description = $7,
+                product_type = $8,
+                product_name = $9,
+                priority = $10
+            WHERE id = $11
+            RETURNING *`;
+        }
+        
+        queryParams = [
+            order_number || existingDelivery.order_number,
+            customer_name || existingDelivery.customer_name,
+            customer_phone || existingDelivery.customer_phone,
+            formatted_address,
+            lat,
+            lng,
+            effectiveDescription,
+            product_type || existingDelivery.product_type,
+            product_name || existingDelivery.product_name,
+            effectivePriority,
+            id
+        ];
+        
+        // Atualiza a entrega
+        const result = await db.query(updateQuery, queryParams);
         
         // Adiciona label de prioridade na resposta
         const updatedDelivery = result.rows[0];
@@ -429,7 +532,23 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// Otimiza rota com ordem manual e paradas
+// Função auxiliar para verificar se uma coluna existe
+async function checkColumnExists(tableName, columnName) {
+    try {
+        const db = getDb({ app: { get: () => require('./database') } });
+        const result = await db.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = $1 AND column_name = $2
+        `, [tableName, columnName]);
+        
+        return result.rows.length > 0;
+    } catch (error) {
+        console.error('Erro ao verificar coluna:', error);
+        return false;
+    }
+}
+
+// Otimiza rota com ordem manual e paradas - VERSÂO ATUALIZADA
 router.post('/optimize', async (req, res) => {
     try {
         const { date, manualOrder, pickupStops } = req.body;
@@ -532,23 +651,58 @@ router.post('/optimize', async (req, res) => {
         // Otimiza a rota usando a nova escala de prioridades
         const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder);
         
+        // Prepara dados da rota para salvar
+        const routeData = {
+            route_date: routeDate,
+            total_distance: optimizedRoute.totalDistance,
+            total_duration: optimizedRoute.totalDuration,
+            optimized_order: JSON.stringify(optimizedRoute.optimizedOrder),
+            route_config: JSON.stringify({
+                circularRoute: circularRoute,
+                originAddress: originAddress,
+                manualOrder: manualOrder,
+                pickupStops: pickupStops,
+                priorityStats: priorityStats,
+                optimizedAt: new Date().toISOString(),
+                totalDeliveries: deliveries.rows.length,
+                totalStops: allStops.length
+            }),
+            status: 'planned'
+        };
+        
         let routeId;
         
         // Atualiza ou cria rota
         if (existingRoutes.rows.length > 0) {
             // Atualiza rota existente
             await db.query(
-                'UPDATE routes SET total_distance = $1, total_duration = $2, optimized_order = $3, status = $4 WHERE id = $5',
-                [optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder), 'planned', existingRoutes.rows[0].id]
+                'UPDATE routes SET total_distance = $1, total_duration = $2, optimized_order = $3, route_config = $4, status = $5 WHERE id = $6',
+                [
+                    routeData.total_distance, 
+                    routeData.total_duration, 
+                    routeData.optimized_order, 
+                    routeData.route_config,
+                    routeData.status,
+                    existingRoutes.rows[0].id
+                ]
             );
             routeId = existingRoutes.rows[0].id;
+            console.log(`Rota existente atualizada (ID: ${routeId}) com configurações completas`);
         } else {
             // Cria nova rota
             const routeResult = await db.query(
-                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order) VALUES ($1, $2, $3, $4) RETURNING id',
-                [routeDate, optimizedRoute.totalDistance, optimizedRoute.totalDuration, JSON.stringify(optimizedRoute.optimizedOrder)]
+                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order, route_config, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                [
+                    routeData.route_date,
+                    routeData.total_distance, 
+                    routeData.total_duration, 
+                    routeData.optimized_order,
+                    routeData.route_config,
+                    routeData.status
+                ]
             );
             routeId = routeResult.rows[0].id;
+            console.log(`Nova rota criada (ID: ${routeId}) com configurações completas`);
         }
         
         // Atualiza status de todas as entregas incluídas para "optimized"
@@ -557,10 +711,11 @@ router.post('/optimize', async (req, res) => {
             ['optimized', routeDate, 'pending']
         );
         
-        console.log(`Rota otimizada criada com ${deliveries.rows.length} entregas e ${allStops.length} paradas total`);
+        console.log(`✅ Rota otimizada salva permanentemente com ${deliveries.rows.length} entregas e ${allStops.length} paradas total`);
         
         res.json({
             routeId: routeId,
+            saved: true,
             ...optimizedRoute,
             circularRoute: circularRoute,
             originAddress: originAddress,
