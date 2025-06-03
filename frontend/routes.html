@@ -474,27 +474,60 @@
 
         // Função editDelivery para preencher os novos campos
         function editDelivery(id) {
-            const delivery = deliveryData.find(d => d.id === id);
-            if (!delivery) return;
+            // Verifica se deliveryData existe globalmente ou como window.deliveryData
+            const data = window.deliveryData || deliveryData || [];
+            const delivery = data.find(d => d.id == id);
             
-            // Preenche o formulário
-            document.getElementById('edit-delivery-id').value = delivery.id;
-            document.getElementById('edit-order-number').value = delivery.order_number || '';
-            document.getElementById('edit-customer-name').value = delivery.customer_name;
-            document.getElementById('edit-customer-phone').value = delivery.customer_phone;
-            document.getElementById('edit-address').value = delivery.address;
-            document.getElementById('edit-priority-select').value = delivery.priority;
-            
-            // Define o produto se existir
-            if (delivery.product_type) {
-                document.getElementById('edit-product-select').value = delivery.product_type;
+            if (!delivery) {
+                console.error('Entrega não encontrada:', id);
+                showToast('Entrega não encontrada!', 'error');
+                return;
             }
             
-            // Mostra o formulário de edição
-            document.getElementById('edit-delivery-container').style.display = 'block';
-            
-            // Rola para o formulário
-            document.getElementById('edit-delivery-container').scrollIntoView({ behavior: 'smooth' });
+            try {
+                // Preenche o formulário com verificações de segurança
+                const editIdEl = document.getElementById('edit-delivery-id');
+                const editOrderEl = document.getElementById('edit-order-number');
+                const editNameEl = document.getElementById('edit-customer-name');
+                const editPhoneEl = document.getElementById('edit-customer-phone');
+                const editAddressEl = document.getElementById('edit-address');
+                const editPriorityEl = document.getElementById('edit-priority-select');
+                const editProductEl = document.getElementById('edit-product-select');
+                
+                if (!editIdEl || !editNameEl || !editPhoneEl || !editAddressEl || !editPriorityEl) {
+                    console.error('Elementos do formulário de edição não encontrados');
+                    showToast('Erro no formulário de edição!', 'error');
+                    return;
+                }
+                
+                // Preenche os campos
+                editIdEl.value = delivery.id || '';
+                editOrderEl.value = delivery.order_number || '';
+                editNameEl.value = delivery.customer_name || '';
+                editPhoneEl.value = delivery.customer_phone || '';
+                editAddressEl.value = delivery.address || '';
+                editPriorityEl.value = delivery.priority || '0';
+                
+                // Define o produto se existir
+                if (editProductEl && delivery.product_type) {
+                    editProductEl.value = delivery.product_type;
+                }
+                
+                // Mostra o formulário de edição
+                const editContainer = document.getElementById('edit-delivery-container');
+                if (editContainer) {
+                    editContainer.style.display = 'block';
+                    
+                    // Rola para o formulário
+                    editContainer.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    console.error('Container de edição não encontrado');
+                }
+                
+            } catch (error) {
+                console.error('Erro ao editar entrega:', error);
+                showToast('Erro ao carregar dados da entrega!', 'error');
+            }
         }
 
         // Função para cancelar edição
@@ -504,68 +537,72 @@
 
         // Renderização da lista de entregas para mostrar o número do pedido
         function renderDeliveryItem(item, index) {
+            if (!item) return '';
+            
             if (item.type === 'pickup') {
                 return `
                     <div class="delivery-header">
                         <h3>🏪 Parada na Confeitaria</h3>
                         <span class="priority priority-0">Parada</span>
                     </div>
-                    <p><strong>📍</strong> ${item.address || settings.origin_address}</p>
+                    <p><strong>📍</strong> ${item.address || (window.settings && window.settings.origin_address) || 'Endereço não definido'}</p>
                     <p><strong>📦</strong> Recarregar produtos</p>
                     <div class="delivery-actions">
                         <div class="manual-order">
                             <label>Ordem:</label>
                             <input type="number" 
                                    class="order-input" 
-                                   value="${manualOrder[item.id] || ''}" 
+                                   value="${(window.manualOrder && window.manualOrder[item.id]) || ''}" 
                                    min="1"
-                                   onchange="updateManualOrder('${item.id}', this.value)">
+                                   onchange="if(window.updateManualOrder) window.updateManualOrder('${item.id}', this.value)">
                         </div>
-                        <button onclick="removePickupStop('${item.id}')" class="btn btn-danger btn-sm">
+                        <button onclick="if(window.removePickupStop) window.removePickupStop('${item.id}')" class="btn btn-danger btn-sm">
                             Remover
                         </button>
                     </div>
                 `;
             } else {
                 const orderNumberDisplay = item.order_number ? `<p><strong>📋</strong> Pedido #${item.order_number}</p>` : '';
-                const productDisplay = item.product_name ? `<span class="priority-indicator priority-${item.priority === 1 ? 'media' : item.priority === 2 ? 'alta' : item.priority === 3 ? 'urgente' : 'normal'}">${item.product_name}</span>` : '';
+                const priority = item.priority || 0;
+                const priorityClass = priority === 1 ? 'media' : priority === 2 ? 'alta' : priority === 3 ? 'urgente' : 'normal';
+                const productDisplay = item.product_name ? `<span class="priority-indicator priority-${priorityClass}">${item.product_name}</span>` : '';
                 
                 return `
                     <div class="delivery-header">
-                        <h3>${item.customer_name} ${productDisplay}</h3>
-                        <span class="priority priority-${item.priority}">${getPriorityLabel(item.priority)}</span>
+                        <h3>${item.customer_name || 'Cliente não informado'} ${productDisplay}</h3>
+                        <span class="priority priority-${priority}">${getPriorityLabel(priority)}</span>
                     </div>
                     ${orderNumberDisplay}
-                    <p><strong>📍</strong> ${item.address}</p>
-                    <p><strong>📦</strong> ${item.product_description}</p>
+                    <p><strong>📍</strong> ${item.address || 'Endereço não informado'}</p>
+                    <p><strong>📦</strong> ${item.product_description || 'Produto não especificado'}</p>
                     ${item.customer_phone ? `<p><strong>📞</strong> ${item.customer_phone}</p>` : ''}
                     <div class="delivery-actions">
                         <div class="manual-order">
                             <label>Ordem:</label>
                             <input type="number" 
                                    class="order-input" 
-                                   value="${manualOrder[item.id] || ''}" 
+                                   value="${(window.manualOrder && window.manualOrder[item.id]) || ''}" 
                                    min="1"
-                                   onchange="updateManualOrder(${item.id}, this.value)">
+                                   onchange="if(window.updateManualOrder) window.updateManualOrder(${item.id}, this.value)">
                         </div>
                         <button onclick="editDelivery(${item.id})" class="btn btn-secondary btn-sm">
                             ✏️ Editar
                         </button>
-                        <button onclick="showDeliveryOnMap(${item.lat}, ${item.lng})" class="btn btn-secondary btn-sm">
+                        <button onclick="if(window.showDeliveryOnMap) window.showDeliveryOnMap(${item.lat || 0}, ${item.lng || 0})" class="btn btn-secondary btn-sm">
                             Ver no Mapa
                         </button>
-                        <button onclick="generateTrackingLink(${item.id})" class="btn btn-info btn-sm">
+                        <button onclick="if(window.generateTrackingLink) window.generateTrackingLink(${item.id})" class="btn btn-info btn-sm">
                             Link
                         </button>
                         ${item.status === 'in_transit' ? 
-                            `<button onclick="completeDelivery(${item.id})" class="btn btn-success btn-sm">
+                            `<button onclick="if(window.completeDelivery) window.completeDelivery(${item.id})" class="btn btn-success btn-sm">
                                 Entregar
                             </button>` : ''}
-                        <button onclick="deleteDelivery(${item.id}, '${item.status}')" class="btn btn-danger btn-sm">
+                        <button onclick="if(window.deleteDelivery) window.deleteDelivery(${item.id}, '${item.status || 'pending'}')" class="btn btn-danger btn-sm">
                             Excluir
                         </button>
                     </div>
-                    <span class="status status-${item.status}">${getStatusLabel(item.status)}</span>
+                    <span class="status status-${item.status || 'pending'}">${getStatusLabel(item.status || 'pending')}</span>
                 `;
             }
         }
@@ -863,6 +900,17 @@
             addPriorityTooltips();
             updateRouteStats();
         };
+
+        // Disponibilizar funções globalmente para uso nos templates
+        window.editDelivery = editDelivery;
+        window.cancelEdit = cancelEdit;
+        window.getPriorityLabel = getPriorityLabel;
+        window.getStatusLabel = getStatusLabel;
+        window.renderDeliveryItem = renderDeliveryItem;
+        window.updateProductInfo = updateProductInfo;
+        window.updateEditProductInfo = updateEditProductInfo;
+        window.getProductDisplayName = getProductDisplayName;
+        window.showToast = showToast;
 
         // Chamar funcionalidades a cada 2 segundos para garantir que estejam ativas
         setInterval(() => {
