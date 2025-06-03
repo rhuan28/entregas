@@ -172,30 +172,13 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>DESCRIÇÃO DETALHADA DO PRODUTO:</label>
-                    <textarea name="product_description" id="product-description" required placeholder="Ex: Bolo de chocolate 2kg com cobertura de brigadeiro"></textarea>
-                    <small class="setting-description">Descreva sabores, decorações e observações especiais</small>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>PRIORIDADE:</label>
-                        <select name="priority" id="priority-select">
-                            <option value="0">Normal</option>
-                            <option value="1">Alta</option>
-                            <option value="2">Urgente</option>
-                        </select>
-                        <small class="setting-description">Definida automaticamente pelo produto, mas pode ser alterada</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>JANELA DE ENTREGA (OPCIONAL):</label>
-                        <div class="time-window">
-                            <input type="time" name="delivery_window_start" placeholder="De">
-                            <span>até</span>
-                            <input type="time" name="delivery_window_end" placeholder="Até">
-                        </div>
-                    </div>
+                    <label>PRIORIDADE:</label>
+                    <select name="priority" id="priority-select">
+                        <option value="0">Normal</option>
+                        <option value="1">Alta</option>
+                        <option value="2">Urgente</option>
+                    </select>
+                    <small class="setting-description">Definida automaticamente pelo produto, mas pode ser alterada</small>
                 </div>
                 
                 <button type="submit" class="btn btn-primary">ADICIONAR ENTREGA</button>
@@ -245,11 +228,6 @@
                 <div class="form-group">
                     <label>ENDEREÇO:</label>
                     <input type="text" id="edit-address" name="address" required>
-                </div>
-                
-                <div class="form-group">
-                    <label>DESCRIÇÃO DETALHADA DO PRODUTO:</label>
-                    <textarea id="edit-product-description" name="product_description" required></textarea>
                 </div>
                 
                 <div class="form-group">
@@ -441,6 +419,15 @@
             if (productSelect.value) {
                 delivery.product_type = productSelect.value;
                 delivery.product_name = getProductDisplayName(productSelect.value);
+                
+                // Define descrição do produto automaticamente baseada no tipo
+                const config = PRODUCT_CONFIG[productSelect.value];
+                if (config) {
+                    delivery.product_description = config.description;
+                }
+            } else {
+                // Se não selecionou produto, usar descrição padrão
+                delivery.product_description = 'Produto não especificado';
             }
             
             try {
@@ -474,7 +461,6 @@
                 customer_name: document.getElementById('edit-customer-name').value,
                 customer_phone: document.getElementById('edit-customer-phone').value,
                 address: document.getElementById('edit-address').value,
-                product_description: document.getElementById('edit-product-description').value,
                 priority: document.getElementById('edit-priority-select').value
             };
 
@@ -483,6 +469,12 @@
             if (productSelect.value) {
                 updatedDelivery.product_type = productSelect.value;
                 updatedDelivery.product_name = getProductDisplayName(productSelect.value);
+                
+                // Atualiza descrição do produto automaticamente
+                const config = PRODUCT_CONFIG[productSelect.value];
+                if (config) {
+                    updatedDelivery.product_description = config.description;
+                }
             }
             
             try {
@@ -517,7 +509,6 @@
             document.getElementById('edit-customer-name').value = delivery.customer_name;
             document.getElementById('edit-customer-phone').value = delivery.customer_phone;
             document.getElementById('edit-address').value = delivery.address;
-            document.getElementById('edit-product-description').value = delivery.product_description;
             document.getElementById('edit-priority-select').value = delivery.priority;
             
             // Define o produto se existir

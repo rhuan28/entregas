@@ -166,10 +166,10 @@ router.post('/', async (req, res) => {
         } = req.body;
         
         // Verifica se os campos obrigatórios estão presentes
-        if (!customer_name || !address || !product_description) {
+        if (!customer_name || !address) {
             return res.status(400).json({ 
                 error: 'Campos obrigatórios faltando', 
-                required: ['customer_name', 'address', 'product_description'] 
+                required: ['customer_name', 'address'] 
             });
         }
         
@@ -194,6 +194,7 @@ router.post('/', async (req, res) => {
         // Determina o tamanho baseado no tipo de produto se não foi especificado
         let effectiveSize = size;
         let effectivePriority = priority;
+        let effectiveDescription = product_description;
         
         if (product_type && PRODUCT_CONFIG[product_type]) {
             const config = PRODUCT_CONFIG[product_type];
@@ -203,6 +204,15 @@ router.post('/', async (req, res) => {
             if (priority === 0) {
                 effectivePriority = config.priority;
             }
+            // Se não foi fornecida descrição, usa a padrão do produto
+            if (!effectiveDescription) {
+                effectiveDescription = `${config.name} - ${config.description || 'Produto da confeitaria'}`;
+            }
+        }
+        
+        // Se ainda não tem descrição, usa uma padrão
+        if (!effectiveDescription) {
+            effectiveDescription = product_name || 'Produto da confeitaria';
         }
         
         console.log('Inserindo entrega no banco de dados...');
@@ -224,7 +234,7 @@ router.post('/', async (req, res) => {
                 coords.formatted_address, 
                 coords.lat, 
                 coords.lng, 
-                product_description,
+                effectiveDescription,
                 product_type || null,
                 product_name || null,
                 effectiveSize || 'M', 
@@ -243,6 +253,7 @@ router.post('/', async (req, res) => {
             ...coords,
             size: effectiveSize,
             priority: effectivePriority,
+            product_description: effectiveDescription,
             message: 'Entrega adicionada com sucesso' 
         });
     } catch (error) {
@@ -299,8 +310,17 @@ router.put('/:id', async (req, res) => {
         
         // Determina prioridade baseada no tipo de produto se aplicável
         let effectivePriority = priority !== undefined ? priority : existingDelivery.priority;
-        if (product_type && PRODUCT_CONFIG[product_type] && priority === undefined) {
-            effectivePriority = PRODUCT_CONFIG[product_type].priority;
+        let effectiveDescription = product_description || existingDelivery.product_description;
+        
+        if (product_type && PRODUCT_CONFIG[product_type]) {
+            const config = PRODUCT_CONFIG[product_type];
+            if (priority === undefined) {
+                effectivePriority = config.priority;
+            }
+            // Se não foi fornecida descrição, atualiza com base no produto
+            if (!product_description) {
+                effectiveDescription = `${config.name} - ${config.description || 'Produto da confeitaria'}`;
+            }
         }
         
         // Atualiza a entrega
@@ -326,7 +346,7 @@ router.put('/:id', async (req, res) => {
                 formatted_address,
                 lat,
                 lng,
-                product_description || existingDelivery.product_description,
+                effectiveDescription,
                 product_type || existingDelivery.product_type,
                 product_name || existingDelivery.product_name,
                 effectivePriority,

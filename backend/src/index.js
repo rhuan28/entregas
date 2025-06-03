@@ -1,9 +1,9 @@
-// src/index.js - Backend principal atualizado para PostgreSQL
+// src/index.js - Backend principal com Socket.IO corrigido
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
-const db = require('./database'); // Nova configuração PostgreSQL
+const db = require('./database');
 require('dotenv').config();
 
 const deliveriesRouter = require('./routes/deliveries');
@@ -14,36 +14,37 @@ const archiveRouter = require('./routes/archive');
 const app = express();
 const server = http.createServer(app);
 
-// Configuração CORS para produção
+// Configuração CORS mais permissiva para Socket.IO
 const corsOptions = {
     origin: [
-        'https://entregas-drab.vercel.app', // Substitua pela sua URL do Vercel
-        'https://entregas.demiplie.com.br',           // ← NOVO DOMÍNIO
+        'https://entregas-drab.vercel.app',
+        'https://entregas.demiplie.com.br',
         process.env.FRONTEND_URL,
-        'http://localhost:3001', // Para desenvolvimento local
-        'http://localhost:3000'  // Para desenvolvimento local
-    ].filter(Boolean), // Remove valores undefined/null
+        'http://localhost:3001',
+        'http://localhost:3000',
+        'http://127.0.0.1:3001',
+        'http://127.0.0.1:3000'
+    ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     optionsSuccessStatus: 200
 };
 
-// Configuração Socket.io com CORS atualizado
+// Configuração Socket.io com configurações melhoradas
 const io = socketIo(server, {
-    cors: {
-        origin: [
-            'https://entregas-drab.vercel.app',        // ← ADICIONAR ESTA LINHA
-            'https://entregas.demiplie.com.br',           // ← NOVO DOMÍNIO
-            process.env.FRONTEND_URL,
-            'http://localhost:3001',
-            'http://localhost:3000'
-        ].filter(Boolean), // Remove valores undefined/null
-        methods: ['GET', 'POST'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization']
-    },
-    allowEIO3: true // Compatibilidade com versões mais antigas
+    cors: corsOptions,
+    allowEIO3: true,
+    transports: ['websocket', 'polling'], // Permite ambos os transportes
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e6,
+    // Configurações específicas para produção
+    ...(process.env.NODE_ENV === 'production' && {
+        cookie: false,
+        serveClient: false
+    })
 });
 
 // Inicialização da aplicação
@@ -51,15 +52,10 @@ async function initializeApp() {
     try {
         console.log('🔄 Inicializando aplicação...');
         
-        // Testa conexão com PostgreSQL
         await db.testConnection();
-        
-        // Inicializa/migra banco de dados
         await db.initializeDatabase();
         
         console.log('✅ Banco de dados inicializado com sucesso!');
-        
-        // Torna a conexão do banco disponível para as rotas
         app.set('db', db);
         
     } catch (error) {
@@ -71,13 +67,15 @@ async function initializeApp() {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
-// Log de todas as requisições
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
-});
+// Log de todas as requisições (apenas em desenvolvimento)
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+        next();
+    });
+}
 
 // Headers CORS adicionais
 app.use((req, res, next) => {
@@ -99,7 +97,6 @@ app.use((req, res, next) => {
 // Endpoint para verificar se o servidor está funcionando
 app.get('/api/health', async (req, res) => {
     try {
-        // Testa conexão com banco
         await db.testConnection();
         
         res.json({ 
@@ -107,7 +104,8 @@ app.get('/api/health', async (req, res) => {
             message: 'Servidor backend funcionando!',
             database: 'connected',
             timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV || 'development'
+            environment: process.env.NODE_ENV || 'development',
+            socketio: 'enabled'
         });
     } catch (error) {
         res.status(500).json({ 
@@ -118,7 +116,18 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Rota separada para listar rotas (atualizada para PostgreSQL)
+// Endpoint específico para testar Socket.IO
+app.get('/api/socket/test', (req, res) => {
+    res.json({
+        socketio: {
+            status: 'enabled',
+            clients: io.engine.clientsCount,
+            transports: ['websocket', 'polling']
+        }
+    });
+});
+
+// Rota separada para listar rotas
 app.get('/api/routes', async (req, res) => {
     try {
         console.log('Listando rotas...');
@@ -162,28 +171,91 @@ app.use('*', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });
 });
 
-// Socket.io para rastreamento em tempo real
+// Socket.io para rastreamento em tempo real com melhor tratamento de erros
 io.on('connection', (socket) => {
-    console.log('Cliente conectado:', socket.id);
+    console.log('✅ Cliente conectado:', socket.id);
+
+    // Melhora o tratamento de erros de conexão
+    socket.on('error', (error) => {
+        console.error('❌ Erro no socket:', socket.id, error);
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.log('❌ Cliente desconectado:', socket.id, 'Razão:', reason);
+    });
 
     socket.on('join-route', (routeId) => {
         socket.join(`route-${routeId}`);
-        console.log(`Cliente ${socket.id} entrou na rota ${routeId}`);
+        console.log(`📍 Cliente ${socket.id} entrou na rota ${routeId}`);
+        
+        // Confirma que entrou na sala
+        socket.emit('joined-route', { routeId, message: 'Conectado ao rastreamento' });
     });
 
     socket.on('update-location', (data) => {
-        // Emite localização para todos acompanhando a rota
-        io.to(`route-${data.routeId}`).emit('location-update', {
-            lat: data.lat,
-            lng: data.lng,
-            deliveryId: data.deliveryId,
-            timestamp: new Date()
-        });
+        try {
+            // Valida os dados recebidos
+            if (!data.lat || !data.lng) {
+                console.error('Dados de localização inválidos:', data);
+                return;
+            }
+
+            // Emite localização para todos acompanhando a rota
+            const locationUpdate = {
+                lat: parseFloat(data.lat),
+                lng: parseFloat(data.lng),
+                deliveryId: data.deliveryId,
+                routeId: data.routeId,
+                timestamp: new Date().toISOString()
+            };
+
+            if (data.routeId) {
+                io.to(`route-${data.routeId}`).emit('location-update', locationUpdate);
+                console.log(`📍 Localização atualizada para rota ${data.routeId}`);
+            } else {
+                // Broadcast geral se não há routeId específica
+                io.emit('location-update', locationUpdate);
+            }
+        } catch (error) {
+            console.error('Erro ao processar atualização de localização:', error);
+        }
     });
 
-    socket.on('disconnect', () => {
-        console.log('Cliente desconectado:', socket.id);
+    // Evento para notificar entrega concluída
+    socket.on('delivery-completed', (data) => {
+        try {
+            io.emit('delivery-completed', {
+                deliveryId: data.deliveryId,
+                timestamp: new Date().toISOString(),
+                message: 'Entrega concluída!'
+            });
+            console.log(`✅ Entrega ${data.deliveryId} marcada como concluída`);
+        } catch (error) {
+            console.error('Erro ao processar entrega concluída:', error);
+        }
     });
+
+    // Evento para quando entregador está se aproximando
+    socket.on('delivery-approaching', (data) => {
+        try {
+            io.emit('delivery-approaching', {
+                deliveryId: data.deliveryId,
+                timestamp: new Date().toISOString(),
+                message: 'Entregador se aproximando!'
+            });
+            console.log(`🚚 Entregador se aproximando da entrega ${data.deliveryId}`);
+        } catch (error) {
+            console.error('Erro ao processar aproximação:', error);
+        }
+    });
+});
+
+// Logs de conexão do Socket.IO
+io.engine.on('connection_error', (err) => {
+    console.error('❌ Erro de conexão Socket.IO:', err.req);
+    console.error('❌ Código:', err.code);
+    console.error('❌ Mensagem:', err.message);
+    console.error('❌ Context:', err.context);
 });
 
 // Torna io disponível para as rotas
@@ -191,23 +263,34 @@ app.set('socketio', io);
 
 // Tratamento de erros global
 app.use((err, req, res, next) => {
-    console.error('Erro não tratado:', err);
+    console.error('❌ Erro não tratado:', err);
     res.status(500).json({ 
         error: 'Erro interno do servidor', 
         details: process.env.NODE_ENV === 'development' ? err.message : 'Erro interno'
     });
 });
 
+// Tratamento de promessas rejeitadas
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Promessa rejeitada não tratada:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('❌ Exceção não capturada:', error);
+    process.exit(1);
+});
+
 // Inicializa a aplicação
 initializeApp().then(() => {
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
         console.log(`🚀 Servidor rodando na porta ${PORT}`);
         console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
         console.log('📊 Configurações carregadas:');
         console.log(`   - DATABASE_URL: ${process.env.DATABASE_URL ? 'Configurado' : 'NÃO CONFIGURADO'}`);
         console.log(`   - FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
         console.log(`   - GOOGLE_MAPS_API_KEY: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configurado' : 'NÃO CONFIGURADO'}`);
+        console.log(`   - Socket.IO: Habilitado com CORS`);
         console.log('🎉 Sistema pronto para uso!');
     });
 }).catch((error) => {
