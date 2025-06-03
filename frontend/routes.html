@@ -380,7 +380,7 @@
             return PRODUCT_CONFIG[productType]?.name || productType || 'Produto não especificado';
         }
 
-        // Formulário de entrega para incluir o número do pedido
+        // Formulário de entrega para incluir o número do pedido (CORRIGIDO)
         document.getElementById('delivery-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -402,10 +402,11 @@
             } else {
                 // Se não selecionou produto, usar descrição padrão
                 delivery.product_description = 'Produto não especificado';
+                delivery.product_name = 'Produto não especificado';
             }
             
             try {
-                const response = await fetch(`${API_URL}/deliveries`, {
+                const response = await fetch(`${window.API_URL || API_URL}/deliveries`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(delivery)
@@ -414,7 +415,11 @@
                 if (response.ok) {
                     showToast('Entrega adicionada com sucesso!', 'success');
                     e.target.reset();
-                    loadDeliveries();
+                    if (window.loadDeliveries) {
+                        window.loadDeliveries();
+                    } else {
+                        loadDeliveries();
+                    }
                 } else {
                     const error = await response.json();
                     throw new Error(error.error || 'Erro ao adicionar entrega');
@@ -425,22 +430,27 @@
             }
         });
 
-        // Formulário de edição para incluir o número do pedido
+        // Formulário de edição para incluir o número do pedido (CORRIGIDO)
         document.getElementById('edit-delivery-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const id = document.getElementById('edit-delivery-id').value;
             const updatedDelivery = {
-                order_number: document.getElementById('edit-order-number').value,
                 customer_name: document.getElementById('edit-customer-name').value,
                 customer_phone: document.getElementById('edit-customer-phone').value,
                 address: document.getElementById('edit-address').value,
                 priority: document.getElementById('edit-priority-select').value
             };
 
+            // Adiciona order_number se o campo existir
+            const orderNumberEl = document.getElementById('edit-order-number');
+            if (orderNumberEl) {
+                updatedDelivery.order_number = orderNumberEl.value;
+            }
+
             // Adiciona informações do produto
             const productSelect = document.getElementById('edit-product-select');
-            if (productSelect.value) {
+            if (productSelect && productSelect.value) {
                 updatedDelivery.product_type = productSelect.value;
                 updatedDelivery.product_name = getProductDisplayName(productSelect.value);
                 
@@ -452,7 +462,7 @@
             }
             
             try {
-                const response = await fetch(`${API_URL}/deliveries/${id}`, {
+                const response = await fetch(`${window.API_URL || API_URL}/deliveries/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updatedDelivery)
@@ -461,7 +471,11 @@
                 if (response.ok) {
                     showToast('Entrega atualizada com sucesso!', 'success');
                     cancelEdit();
-                    loadDeliveries();
+                    if (window.loadDeliveries) {
+                        window.loadDeliveries();
+                    } else {
+                        loadDeliveries();
+                    }
                 } else {
                     const data = await response.json();
                     throw new Error(data.error || 'Erro ao atualizar entrega');
@@ -472,7 +486,7 @@
             }
         });
 
-        // Função editDelivery para preencher os novos campos
+        // Função editDelivery para preencher os novos campos (CORRIGIDA)
         function editDelivery(id) {
             // Verifica se deliveryData existe globalmente ou como window.deliveryData
             const data = window.deliveryData || deliveryData || [];
@@ -502,7 +516,7 @@
                 
                 // Preenche os campos
                 editIdEl.value = delivery.id || '';
-                editOrderEl.value = delivery.order_number || '';
+                if (editOrderEl) editOrderEl.value = delivery.order_number || '';
                 editNameEl.value = delivery.customer_name || '';
                 editPhoneEl.value = delivery.customer_phone || '';
                 editAddressEl.value = delivery.address || '';
@@ -511,6 +525,8 @@
                 // Define o produto se existir
                 if (editProductEl && delivery.product_type) {
                     editProductEl.value = delivery.product_type;
+                    // Atualiza a prioridade baseada no produto
+                    updateEditProductInfo();
                 }
                 
                 // Mostra o formulário de edição
@@ -535,7 +551,7 @@
             document.getElementById('edit-delivery-container').style.display = 'none';
         }
 
-        // Renderização da lista de entregas para mostrar o número do pedido
+        // Renderização da lista de entregas compatível com routes.js
         function renderDeliveryItem(item, index) {
             if (!item) return '';
             
@@ -564,8 +580,10 @@
             } else {
                 const orderNumberDisplay = item.order_number ? `<p><strong>📋</strong> Pedido #${item.order_number}</p>` : '';
                 const priority = item.priority || 0;
-                const priorityClass = priority === 1 ? 'media' : priority === 2 ? 'alta' : priority === 3 ? 'urgente' : 'normal';
-                const productDisplay = item.product_name ? `<span class="priority-indicator priority-${priorityClass}">${item.product_name}</span>` : '';
+                
+                // Usa as classes CSS do styles.css em vez de estilos inline
+                const productDisplay = item.product_name ? 
+                    `<span class="priority-indicator priority-${priority}">${item.product_name}</span>` : '';
                 
                 return `
                     <div class="delivery-header">
