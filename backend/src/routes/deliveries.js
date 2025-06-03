@@ -1,4 +1,4 @@
-// routes/deliveries.js - Versão atualizada para PostgreSQL
+// routes/deliveries.js - Versão atualizada para PostgreSQL com novos campos
 const express = require('express');
 const router = express.Router();
 const googleMaps = require('../services/googleMaps');
@@ -14,6 +14,18 @@ const CONFEITARIA_ADDRESS = {
     address: 'R. Barata Ribeiro, 466 - Vila Itapura, Campinas - SP, 13023-030',
     lat: -22.894334936369436,
     lng: -47.0640515913573
+};
+
+// Configuração dos produtos com suas prioridades
+const PRODUCT_CONFIG = {
+    'bentocake': { name: 'Bentocake', priority: 0, size: 'P' },
+    '6fatias': { name: '6 fatias', priority: 0, size: 'P' },
+    '10fatias': { name: '10 fatias', priority: 1, size: 'M' },
+    '18fatias': { name: '18 fatias', priority: 1, size: 'M' },
+    '24fatias': { name: '24 fatias', priority: 1, size: 'G' },
+    '30fatias': { name: '30 fatias', priority: 1, size: 'G' },
+    '40fatias': { name: '40 fatias', priority: 1, size: 'GG' },
+    'personalizado': { name: 'Personalizado', priority: 0, size: 'M' }
 };
 
 // Lista entregas por data
@@ -32,7 +44,7 @@ router.get('/', async (req, res) => {
             query += ' WHERE order_date = CURRENT_DATE';
         }
         
-        query += ' ORDER BY priority DESC';
+        query += ' ORDER BY priority DESC, created_at ASC';
         
         console.log(`Executando query para buscar entregas: ${query} com data ${date || 'HOJE'}`);
         
@@ -135,14 +147,17 @@ router.delete('/clear/:date', async (req, res) => {
     }
 });
 
-// Adiciona nova entrega
+// Adiciona nova entrega com campos atualizados
 router.post('/', async (req, res) => {
     try {
         const { 
+            order_number,
             customer_name, 
             customer_phone, 
             address, 
-            product_description, 
+            product_description,
+            product_type,
+            product_name,
             size = 'M',
             priority = 0,
             delivery_window_start = null,
@@ -176,27 +191,44 @@ router.post('/', async (req, res) => {
             });
         }
         
+        // Determina o tamanho baseado no tipo de produto se não foi especificado
+        let effectiveSize = size;
+        let effectivePriority = priority;
+        
+        if (product_type && PRODUCT_CONFIG[product_type]) {
+            const config = PRODUCT_CONFIG[product_type];
+            if (!size || size === 'M') {
+                effectiveSize = config.size;
+            }
+            if (priority === 0) {
+                effectivePriority = config.priority;
+            }
+        }
+        
         console.log('Inserindo entrega no banco de dados...');
         
         const db = getDb(req);
         const result = await db.query(
             `INSERT INTO deliveries (
-                order_date, customer_name, customer_phone, address, 
-                lat, lng, product_description, size, priority, 
+                order_date, order_number, customer_name, customer_phone, address, 
+                lat, lng, product_description, product_type, product_name, size, priority, 
                 delivery_window_start, delivery_window_end
             ) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING id`,
             [
                 effectiveDate,
+                order_number || null,
                 customer_name, 
                 customer_phone || '',
                 coords.formatted_address, 
                 coords.lat, 
                 coords.lng, 
-                product_description, 
-                size || 'M', 
-                priority || 0, 
+                product_description,
+                product_type || null,
+                product_name || null,
+                effectiveSize || 'M', 
+                effectivePriority || 0, 
                 delivery_window_start || null, 
                 delivery_window_end || null
             ]
@@ -209,10 +241,102 @@ router.post('/', async (req, res) => {
             order_date: effectiveDate,
             ...req.body, 
             ...coords,
+            size: effectiveSize,
+            priority: effectivePriority,
             message: 'Entrega adicionada com sucesso' 
         });
     } catch (error) {
         console.error('Erro ao adicionar entrega:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Atualiza uma entrega
+router.put('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { 
+            order_number,
+            customer_name, 
+            customer_phone, 
+            address, 
+            product_description,
+            product_type,
+            product_name,
+            priority 
+        } = req.body;
+        
+        const db = getDb(req);
+        
+        // Verifica se a entrega existe
+        const delivery = await db.query(
+            'SELECT * FROM deliveries WHERE id = $1',
+            [id]
+        );
+        
+        if (delivery.rows.length === 0) {
+            return res.status(404).json({ error: 'Entrega não encontrada' });
+        }
+        
+        const existingDelivery = delivery.rows[0];
+        
+        // Se o endereço foi alterado, precisamos geocodificar novamente
+        let lat = existingDelivery.lat;
+        let lng = existingDelivery.lng;
+        let formatted_address = existingDelivery.address;
+        
+        if (address && address !== existingDelivery.address) {
+            try {
+                const coords = await googleMaps.geocodeAddress(address);
+                lat = coords.lat;
+                lng = coords.lng;
+                formatted_address = coords.formatted_address;
+            } catch (error) {
+                console.error('Erro ao geocodificar endereço:', error);
+                return res.status(400).json({ error: 'Não foi possível geocodificar o endereço fornecido' });
+            }
+        }
+        
+        // Determina prioridade baseada no tipo de produto se aplicável
+        let effectivePriority = priority !== undefined ? priority : existingDelivery.priority;
+        if (product_type && PRODUCT_CONFIG[product_type] && priority === undefined) {
+            effectivePriority = PRODUCT_CONFIG[product_type].priority;
+        }
+        
+        // Atualiza a entrega
+        const result = await db.query(
+            `UPDATE deliveries SET 
+                order_number = $1,
+                customer_name = $2, 
+                customer_phone = $3, 
+                address = $4, 
+                lat = $5, 
+                lng = $6, 
+                product_description = $7,
+                product_type = $8,
+                product_name = $9,
+                priority = $10,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $11
+            RETURNING *`,
+            [
+                order_number || existingDelivery.order_number,
+                customer_name || existingDelivery.customer_name,
+                customer_phone || existingDelivery.customer_phone,
+                formatted_address,
+                lat,
+                lng,
+                product_description || existingDelivery.product_description,
+                product_type || existingDelivery.product_type,
+                product_name || existingDelivery.product_name,
+                effectivePriority,
+                id
+            ]
+        );
+        
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Erro ao atualizar entrega:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -443,81 +567,6 @@ router.delete('/:id', async (req, res) => {
         res.json({ message: 'Entrega excluída com sucesso' });
     } catch (error) {
         console.error('Erro ao deletar entrega:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Atualiza uma entrega
-router.put('/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { 
-            customer_name, 
-            customer_phone, 
-            address, 
-            product_description, 
-            priority 
-        } = req.body;
-        
-        const db = getDb(req);
-        
-        // Verifica se a entrega existe
-        const delivery = await db.query(
-            'SELECT * FROM deliveries WHERE id = $1',
-            [id]
-        );
-        
-        if (delivery.rows.length === 0) {
-            return res.status(404).json({ error: 'Entrega não encontrada' });
-        }
-        
-        const existingDelivery = delivery.rows[0];
-        
-        // Se o endereço foi alterado, precisamos geocodificar novamente
-        let lat = existingDelivery.lat;
-        let lng = existingDelivery.lng;
-        let formatted_address = existingDelivery.address;
-        
-        if (address && address !== existingDelivery.address) {
-            try {
-                const coords = await googleMaps.geocodeAddress(address);
-                lat = coords.lat;
-                lng = coords.lng;
-                formatted_address = coords.formatted_address;
-            } catch (error) {
-                console.error('Erro ao geocodificar endereço:', error);
-                return res.status(400).json({ error: 'Não foi possível geocodificar o endereço fornecido' });
-            }
-        }
-        
-        // Atualiza a entrega
-        const result = await db.query(
-            `UPDATE deliveries SET 
-                customer_name = $1, 
-                customer_phone = $2, 
-                address = $3, 
-                lat = $4, 
-                lng = $5, 
-                product_description = $6, 
-                priority = $7,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8
-            RETURNING *`,
-            [
-                customer_name || existingDelivery.customer_name,
-                customer_phone || existingDelivery.customer_phone,
-                formatted_address,
-                lat,
-                lng,
-                product_description || existingDelivery.product_description,
-                priority !== undefined ? priority : existingDelivery.priority,
-                id
-            ]
-        );
-        
-        res.json(result.rows[0]);
-    } catch (error) {
-        console.error('Erro ao atualizar entrega:', error);
         res.status(500).json({ error: error.message });
     }
 });
