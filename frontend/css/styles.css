@@ -1790,6 +1790,6 @@ textarea:focus-visible {
 
 /* Estilo para o valor da rota */
 .route-stats .route-value {
-    color: var(--success-color); /* Cor para o valor, pode ser ajustada */
+    color: inherit; /* Herda a cor do elemento pai (.route-stats) */
     font-weight: 500; /* Ou bold, conforme preferência */
 }
