@@ -366,20 +366,10 @@ router.post('/', async (req, res) => {
             if (priority === 0) {
                 effectivePriority = config.priority;
             }
-            
-            // Se não foi fornecida descrição, usa a padrão do produto
-            if (!effectiveDescription) {
-                effectiveDescription = `${config.name} - Produto da confeitaria`;
-            }
-            
+                        
             console.log(`Produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
         }
-        
-        // Se ainda não tem descrição, usa uma padrão
-        if (!effectiveDescription) {
-            effectiveDescription = product_name || 'Produto da confeitaria';
-        }
-        
+                
         console.log(`Inserindo entrega no banco de dados com prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})...`);
         
         const db = getDb(req);
