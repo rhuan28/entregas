@@ -157,7 +157,81 @@ function getStatusLabel(status) {
     return labels[status] || status;
 }
 
-// --- Funções do Mapa ---
+// --- Funções do Mapa e Autocomplete ---
+
+function initializeAddressAutocomplete() {
+    if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+        console.warn('Google Maps Places library não está pronta para o Autocomplete. Tentando em 1s.');
+        setTimeout(initializeAddressAutocomplete, 1000); // Tenta novamente em 1 segundo
+        return;
+    }
+    console.log("Tentando inicializar Autocomplete do Google Places...");
+
+    // Autocomplete para o formulário de NOVA ENTREGA
+    const addressInput = document.getElementById('address-input');
+    if (addressInput) {
+        try {
+            const autocompleteNew = new google.maps.places.Autocomplete(
+                addressInput,
+                {
+                    types: ['address'],
+                    componentRestrictions: { country: 'br' } // Restringe ao Brasil
+                }
+            );
+            autocompleteNew.addListener('place_changed', function() {
+                const place = autocompleteNew.getPlace();
+                if (place && place.formatted_address) {
+                    addressInput.value = place.formatted_address;
+                } else if (place && place.name && !place.formatted_address) {
+                    // Se for um POI sem endereço formatado, usa o nome.
+                    // Mas idealmente o usuário deve buscar um endereço completo.
+                    console.warn('Autocomplete para nova entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
+                     // addressInput.value = place.name; // Descomente se quiser usar o nome do POI
+                } else {
+                    console.warn('Autocomplete para nova entrega: local não encontrado ou sem endereço formatado.');
+                }
+            });
+            console.log("Autocomplete para 'address-input' inicializado.");
+        } catch(e) {
+            console.error("Erro ao inicializar autocomplete para 'address-input':", e);
+        }
+    } else {
+        console.warn("'address-input' não encontrado para o Autocomplete.");
+    }
+
+    // Autocomplete para o formulário de EDIÇÃO DE ENTREGA
+    const editAddressInput = document.getElementById('edit-address');
+    if (editAddressInput) {
+         try {
+            const autocompleteEdit = new google.maps.places.Autocomplete(
+                editAddressInput,
+                {
+                    types: ['address'],
+                    componentRestrictions: { country: 'br' }
+                }
+            );
+            autocompleteEdit.addListener('place_changed', function() {
+                const place = autocompleteEdit.getPlace();
+                if (place && place.formatted_address) {
+                    editAddressInput.value = place.formatted_address;
+                } else if (place && place.name && !place.formatted_address) {
+                    console.warn('Autocomplete para edição de entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
+                    // editAddressInput.value = place.name;
+                } else {
+                     console.warn('Autocomplete para edição de entrega: local não encontrado ou sem endereço formatado.');
+                }
+            });
+            console.log("Autocomplete para 'edit-address' inicializado.");
+        } catch(e) {
+            console.error("Erro ao inicializar autocomplete para 'edit-address':", e);
+        }
+    } else {
+        // Este elemento pode não existir até que o formulário de edição seja aberto.
+        // Pode ser necessário inicializá-lo quando o formulário de edição se torna visível.
+        // console.warn("'edit-address' não encontrado para o Autocomplete no carregamento inicial.");
+    }
+}
+
 
 function initMap() {
     if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
@@ -201,7 +275,7 @@ function initMap() {
             map: map,
             title: 'Confeitaria Demiplié',
             icon: {
-                url: 'assets/icon-sq.png',
+                url: 'assets/logo-demiplie.png',
                 scaledSize: new google.maps.Size(35, 35),
                 anchor: new google.maps.Point(17, 35)
             },
@@ -216,16 +290,15 @@ function initMap() {
     }
 }
 
-window.onGoogleMapsApiLoaded = function() {
-    console.log("Google Maps API carregada via callback.");
-    initMap();
-    if (typeof loadPageData === "function") {
-        loadPageData();
-    } else {
-        if (typeof loadSettings === "function") loadSettings();
-        if (typeof loadDeliveries === "function") loadDeliveries();
-    }
+window.onGoogleMapsApiLoaded = async function() {
+    console.log("Google Maps API carregada via callback (routes.js).");
+    initMap(); 
+    await loadPageData(); 
+    // initializeAddressAutocomplete() será chamado dentro de loadPageData após outras inicializações,
+    // ou diretamente aqui se for mais robusto garantir a ordem.
+    initializeAddressAutocomplete();
 };
+
 
 function clearMarkers() {
     markers.forEach(marker => marker.setMap(null));
@@ -908,7 +981,7 @@ async function loadSettings() {
         if (kmRateEl) kmRateEl.value = settings.km_rate || '2.50';
 
         confeitariaLocation.address = settings.origin_address;
-        if (settings.origin_address !== confeitariaLocation.address && typeof google !== 'undefined' && google.maps) {
+        if (settings.origin_address && typeof google !== 'undefined' && google.maps) { // Verifica se google.maps existe
             const geocoder = new google.maps.Geocoder();
             geocoder.geocode({ 'address': settings.origin_address }, function(results, status) {
                 if (status == 'OK' && results[0]) {
@@ -1001,7 +1074,7 @@ function addPickupStop() {
         address: confeitariaLocation.address,
         order: 999
     });
-    manualOrder[newPickupId] = (Object.keys(manualOrder).length > 0 ? Math.max(...Object.values(manualOrder).filter(v => typeof v === 'number')) : 0) + 1;
+    manualOrder[newPickupId] = (Object.keys(manualOrder).length > 0 ? Math.max(0, ...Object.values(manualOrder).filter(v => typeof v === 'number')) : 0) + 1;
     renderDeliveriesList();
     updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
     showToast("Parada na confeitaria adicionada.", "info");
@@ -1033,19 +1106,20 @@ function updateManualOrder(itemId, orderValue) {
 // --- Inicialização ---
 async function loadPageData() {
     console.log('Iniciando carregamento principal de dados da página de rotas...');
-    
     await loadSettings(); 
-    
     if (typeof google !== 'undefined' && typeof google.maps !== 'undefined' && !map) {
-        initMap(); // initMap agora usa confeitariaLocation que pode ter sido atualizada por loadSettings
+        initMap();
     }
-    
-    await loadDeliveries(); // Carrega entregas e rota existente
-    
+    await loadDeliveries();
     if (typeof window.ensurePriorityFeatures === "function") window.ensurePriorityFeatures();
     else if (typeof addPriorityLegend === "function") addPriorityLegend();
-    
-    updateRouteStats(); // Atualiza estatísticas finais
+    updateRouteStats();
+    // O Autocomplete é melhor inicializado depois que a API do Google estiver totalmente carregada.
+    // A função onGoogleMapsApiLoaded já chama initializeAddressAutocomplete.
+    // Se a API já estiver carregada no momento do onload, podemos chamar aqui também como garantia.
+    if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+        initializeAddressAutocomplete();
+    }
 }
 
 window.onload = async () => {
@@ -1054,14 +1128,13 @@ window.onload = async () => {
 
     if (routeDateElement) {
         try {
-            // CORREÇÃO DA DATA: Usar T12:00:00Z para meio-dia UTC
             const dateObj = new Date(routeDateString + 'T12:00:00Z'); 
             const formattedDate = dateObj.toLocaleDateString('pt-BR', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
-                timeZone: 'America/Sao_Paulo' // Importante para formatar no fuso correto
+                timeZone: 'America/Sao_Paulo'
             });
             routeDateElement.textContent = formattedDate;
         } catch (e) {
@@ -1090,10 +1163,15 @@ window.onload = async () => {
     }
 
     if (typeof google !== 'undefined' && typeof google.maps !== 'undefined') {
+        // Se a API já está carregada, onGoogleMapsApiLoaded pode não ter sido chamado via callback.
+        // Então, chamamos initMap e loadPageData diretamente.
+        initMap(); // Garante que o mapa seja inicializado
         await loadPageData();
+        initializeAddressAutocomplete(); // Garante que o autocomplete seja inicializado
     } else {
-        console.log("Aguardando API do Google Maps carregar para executar loadPageData...");
-        // onGoogleMapsApiLoaded (definido globalmente ou no callback da API) se encarregará de chamar loadPageData.
+        console.log("Aguardando API do Google Maps carregar para executar initMap e loadPageData...");
+        // onGoogleMapsApiLoaded (definido globalmente ou no callback da API)
+        // se encarregará de chamar initMap, loadPageData e initializeAddressAutocomplete.
     }
 
     if (socket) {
@@ -1107,7 +1185,8 @@ window.onload = async () => {
             }
         });
         socket.on('delivery-completed', (data) => {
-            const delivery = deliveryData.find(d => d.id === parseInt(data.deliveryId)); // Garanta que o ID seja comparado corretamente
+            const deliveryIdToUpdate = parseInt(data.deliveryId);
+            const delivery = deliveryData.find(d => d.id === deliveryIdToUpdate);
             if (delivery) {
                 delivery.status = 'delivered';
                 renderDeliveriesList();
@@ -1120,7 +1199,7 @@ window.onload = async () => {
 };
 
 window.editDelivery = window.editDelivery || function(idString) {
-    const id = parseInt(idString); // Garante que o ID seja número para comparação
+    const id = parseInt(idString);
     const delivery = deliveryData.find(d => d.id === id);
     if (!delivery) { showToast('Entrega não encontrada.', 'error'); return; }
     const fields = {
