@@ -318,6 +318,8 @@ function updateMapMarkers(itemsToMark) {
             console.warn("Item inválido ou sem coordenadas para marcar:", item);
             return;
         }
+    
+    const markerLabel = typeof item.indexInRoute !== 'undefined' ? (item.indexInRoute + 1).toString() : (idx + 1).toString();
 
     const markerIconConfig = {
         path: google.maps.SymbolPath.CIRCLE,
