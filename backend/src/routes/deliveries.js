@@ -305,25 +305,20 @@ router.post('/', async (req, res) => {
             customer_name, 
             customer_phone, 
             address, 
-            product_description,
+            product_description, // Pode vir como undefined do frontend
             product_type,
-            product_name,
-            size = 'M',
+            product_name: productNameFromRequest, // Nome que PODE vir do frontend
+            size = 'M', // Default se não vier ou não for determinado pelo product_type
             priority = 0,
             delivery_window_start = null,
             delivery_window_end = null,
             order_date 
         } = req.body;
         
-        // Verifica se os campos obrigatórios estão presentes
         if (!customer_name || !address) {
-            return res.status(400).json({ 
-                error: 'Campos obrigatórios faltando', 
-                required: ['customer_name', 'address'] 
-            });
+            return res.status(400).json({ error: 'Campos obrigatórios faltando', required: ['customer_name', 'address'] });
         }
         
-        // Valida prioridade
         let validatedPriority;
         try {
             validatedPriority = validatePriority(priority);
@@ -331,47 +326,54 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: error.message });
         }
         
-        // Data padrão é hoje se não for fornecida
         const effectiveDate = order_date || new Date().toISOString().split('T')[0];
         
-        console.log('Tentando geocodificar endereço:', address);
-        
-        // Geocodifica o endereço
         let coords;
         try {
             coords = await googleMaps.geocodeAddress(address);
-            console.log('Coordenadas obtidas:', coords);
         } catch (geocodeError) {
-            console.error('Erro ao geocodificar:', geocodeError);
-            return res.status(400).json({ 
-                error: 'Não foi possível encontrar o endereço fornecido',
-                details: geocodeError.message
-            });
+            return res.status(400).json({ error: 'Não foi possível encontrar o endereço fornecido', details: geocodeError.message });
         }
         
-        // Determina configurações baseadas no tipo de produto
+        let finalProductName = productNameFromRequest;
+        let finalProductDescription = product_description;
         let effectiveSize = size;
-        let effectivePriority = validatedPriority;
-        let effectiveDescription = product_description;
-        
+        // validatedPriority já contém a prioridade correta (do form ou 0)
+
         if (product_type && PRODUCT_CONFIG[product_type]) {
             const config = PRODUCT_CONFIG[product_type];
-            
-            // Atualiza tamanho se não foi especificado
-            if (!size || size === 'M') {
+            // Define o nome do produto com base no PRODUCT_CONFIG se não foi enviado pelo frontend
+            if (!finalProductName) {
+                finalProductName = config.name;
+            }
+            // Define a descrição como o nome do produto se nenhuma descrição foi enviada
+            if (!finalProductDescription) {
+                finalProductDescription = finalProductName; // Ex: "6 fatias"
+            }
+            // Define o tamanho com base no PRODUCT_CONFIG se não foi enviado ou é o default 'M'
+            if (!req.body.size || req.body.size === 'M') { // Verifica se 'size' foi explicitamente enviado
                 effectiveSize = config.size;
             }
-            
-            // Atualiza prioridade se está no valor padrão (0) - só aplica prioridade do produto se não foi definida manualmente
-            if (priority === 0) {
-                effectivePriority = config.priority;
+            // Se a prioridade veio como 0 (default/Normal) do formulário, usa a do produto.
+            // Se o usuário especificou uma prioridade > 0, ela é mantida por `validatedPriority`.
+            if (parseInt(priority) === 0) { 
+                validatedPriority = config.priority;
             }
-                        
-            console.log(`Produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
+        } else {
+            // Se não há product_type válido, mas product_name foi enviado, usa-o para descrição se vazia
+            if (!finalProductDescription && finalProductName) {
+                finalProductDescription = finalProductName;
+            }
         }
-                
-        console.log(`Inserindo entrega no banco de dados com prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})...`);
-        
+
+        // Se após tudo, a descrição ainda for nula/undefined, e não queremos um fallback genérico,
+        // ela será salva como null (o banco de dados permite).
+        // Se 'finalProductName' é a única info, ele já foi usado como 'finalProductDescription'.
+        if (!finalProductDescription && !finalProductName) {
+            finalProductDescription = null; // Ou 'Produto genérico' se preferir não ter null
+        }
+
+
         const db = getDb(req);
         const result = await db.query(
             `INSERT INTO deliveries (
@@ -380,38 +382,30 @@ router.post('/', async (req, res) => {
                 delivery_window_start, delivery_window_end
             ) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-             RETURNING id`,
+             RETURNING *`, // Retorna todos os campos para consistência
             [
                 effectiveDate,
                 order_number || null,
                 customer_name, 
-                customer_phone || '',
+                customer_phone || '', // Salva string vazia se não fornecido
                 coords.formatted_address, 
                 coords.lat, 
                 coords.lng, 
-                effectiveDescription,
+                finalProductDescription,   // Usa a descrição finalizada
                 product_type || null,
-                product_name || null,
-                effectiveSize || 'M', 
-                effectivePriority, 
+                finalProductName,          // Usa o nome do produto finalizado
+                effectiveSize, 
+                validatedPriority,         // Usa a prioridade validada/ajustada
                 delivery_window_start || null, 
                 delivery_window_end || null
             ]
         );
         
-        console.log('Entrega adicionada com sucesso, ID:', result.rows[0].id);
+        const newDelivery = result.rows[0];
+        newDelivery.priority_label = getPriorityLabel(newDelivery.priority);
         
-        res.status(201).json({ 
-            id: result.rows[0].id, 
-            order_date: effectiveDate,
-            ...req.body, 
-            ...coords,
-            size: effectiveSize,
-            priority: effectivePriority,
-            priority_label: getPriorityLabel(effectivePriority),
-            product_description: effectiveDescription,
-            message: 'Entrega adicionada com sucesso' 
-        });
+        res.status(201).json(newDelivery); // Envia a entrega completa criada
+
     } catch (error) {
         console.error('Erro ao adicionar entrega:', error);
         res.status(500).json({ error: error.message });
@@ -427,37 +421,34 @@ router.put('/:id', async (req, res) => {
             customer_name, 
             customer_phone, 
             address, 
-            product_description,
-            product_type,
-            product_name,
-            priority 
+            product_description: new_product_description, // Descrição vinda do formulário de edição
+
+            product_type: new_product_type,
+            product_name: new_product_name_from_request, // Nome que PODE vir do frontend na edição
+
+            priority: new_priority, // Prioridade vinda do formulário de edição
+
+            size: new_size // Tamanho vindo do formulário de edição
+
         } = req.body;
         
         const db = getDb(req);
         
-        // Verifica se a entrega existe
-        const delivery = await db.query(
-            'SELECT * FROM deliveries WHERE id = $1',
-            [id]
-        );
-        
-        if (delivery.rows.length === 0) {
+        const deliveryResult = await db.query('SELECT * FROM deliveries WHERE id = $1', [id]);
+        if (deliveryResult.rows.length === 0) {
             return res.status(404).json({ error: 'Entrega não encontrada' });
         }
+        const existingDelivery = deliveryResult.rows[0];
         
-        const existingDelivery = delivery.rows[0];
-        
-        // Valida prioridade se fornecida
         let validatedPriority = existingDelivery.priority;
-        if (priority !== undefined) {
+        if (new_priority !== undefined) {
             try {
-                validatedPriority = validatePriority(priority);
+                validatedPriority = validatePriority(new_priority);
             } catch (error) {
                 return res.status(400).json({ error: error.message });
             }
         }
         
-        // Se o endereço foi alterado, precisamos geocodificar novamente
         let lat = existingDelivery.lat;
         let lng = existingDelivery.lng;
         let formatted_address = existingDelivery.address;
@@ -469,86 +460,82 @@ router.put('/:id', async (req, res) => {
                 lng = coords.lng;
                 formatted_address = coords.formatted_address;
             } catch (error) {
-                console.error('Erro ao geocodificar endereço:', error);
-                return res.status(400).json({ error: 'Não foi possível geocodificar o endereço fornecido' });
+                return res.status(400).json({ error: 'Não foi possível geocodificar o novo endereço' });
             }
         }
-        
-        // Determina configurações baseadas no tipo de produto
-        let effectivePriority = validatedPriority;
-        let effectiveDescription = product_description || existingDelivery.product_description;
-        
-        if (product_type && PRODUCT_CONFIG[product_type]) {
-            const config = PRODUCT_CONFIG[product_type];
-            
-            // Se a prioridade não foi definida explicitamente, usa a do produto
-            if (priority === undefined) {
-                effectivePriority = config.priority;
+
+        let finalProductName = new_product_name_from_request || existingDelivery.product_name;
+        let finalProductDescription = (new_product_description !== undefined) ? new_product_description : existingDelivery.product_description;
+        let finalSize = new_size || existingDelivery.size;
+
+        // Se o tipo de produto mudou, ou se o nome/descrição não foram enviados e o tipo existe
+
+        if (new_product_type && PRODUCT_CONFIG[new_product_type]) {
+            const config = PRODUCT_CONFIG[new_product_type];
+            // Se o product_type mudou, ou se o nome não foi enviado pelo request, atualiza o nome.
+
+            if (new_product_type !== existingDelivery.product_type || !new_product_name_from_request) {
+                finalProductName = config.name;
             }
-            
-            // Se não foi fornecida descrição, atualiza com base no produto
-            if (!product_description) {
-                effectiveDescription = `${config.name} - Produto da confeitaria`;
+            // Se a descrição não foi alterada pelo usuário (veio undefined) OU se o usuário apagou (veio ''),
+
+            // E o tipo de produto mudou, OU se a descrição está vazia e o tipo é o mesmo ou novo:
+
+            // Basicamente, se a descrição está vazia ou não foi explicitamente definida na edição, recalcula.
+
+            if (new_product_description === '' || (new_product_description === undefined && new_product_type !== existingDelivery.product_type)) {
+                finalProductDescription = finalProductName; // Usa o nome do produto como descrição
+
             }
-            
-            console.log(`Atualizando produto ${product_type}: prioridade ${effectivePriority} (${getPriorityLabel(effectivePriority)})`);
+             // Se o tamanho não foi alterado pelo usuário (veio undefined) E o tipo mudou
+
+            if (new_size === undefined && new_product_type !== existingDelivery.product_type) {
+                finalSize = config.size;
+            }
+            // Se a prioridade não foi alterada pelo usuário E o tipo mudou
+
+            if (new_priority === undefined && new_product_type !== existingDelivery.product_type) {
+                validatedPriority = config.priority;
+            }
+        } else if (new_product_type) { // Tipo de produto não configurado, mas foi enviado
+
+             if (!finalProductName) finalProductName = new_product_type; // Usa o tipo como nome se nome estiver vazio
+
+             if (finalProductDescription === '') finalProductDescription = finalProductName; // Se descrição apagada, usa nome
+
         }
         
-        // Verifica se a coluna updated_at existe antes de usá-la
-        const hasUpdatedAt = await checkColumnExists('deliveries', 'updated_at');
-        
-        let updateQuery;
-        let queryParams;
-        
-        if (hasUpdatedAt) {
-            updateQuery = `UPDATE deliveries SET 
-                order_number = $1,
-                customer_name = $2, 
-                customer_phone = $3, 
-                address = $4, 
-                lat = $5, 
-                lng = $6, 
-                product_description = $7,
-                product_type = $8,
-                product_name = $9,
-                priority = $10,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $11
+        // Se o usuário explicitamente apagou a descrição, ela deve ser salva como vazia ou null
+
+        if (new_product_description === '') {
+            finalProductDescription = null; // Ou '' dependendo da preferência do banco
+
+        }
+
+
+        const updateQuery = `UPDATE deliveries SET 
+            order_number = $1, customer_name = $2, customer_phone = $3, address = $4, 
+            lat = $5, lng = $6, product_description = $7, product_type = $8, 
+            product_name = $9, priority = $10, size = $11, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $12
             RETURNING *`;
-        } else {
-            updateQuery = `UPDATE deliveries SET 
-                order_number = $1,
-                customer_name = $2, 
-                customer_phone = $3, 
-                address = $4, 
-                lat = $5, 
-                lng = $6, 
-                product_description = $7,
-                product_type = $8,
-                product_name = $9,
-                priority = $10
-            WHERE id = $11
-            RETURNING *`;
-        }
         
-        queryParams = [
-            order_number || existingDelivery.order_number,
+        const queryParams = [
+            order_number !== undefined ? order_number : existingDelivery.order_number,
             customer_name || existingDelivery.customer_name,
-            customer_phone || existingDelivery.customer_phone,
+            customer_phone !== undefined ? (customer_phone || '') : existingDelivery.customer_phone,
             formatted_address,
             lat,
             lng,
-            effectiveDescription,
-            product_type || existingDelivery.product_type,
-            product_name || existingDelivery.product_name,
-            effectivePriority,
+            finalProductDescription,
+            new_product_type || existingDelivery.product_type,
+            finalProductName,
+            validatedPriority,
+            finalSize,
             id
         ];
         
-        // Atualiza a entrega
         const result = await db.query(updateQuery, queryParams);
-        
-        // Adiciona label de prioridade na resposta
         const updatedDelivery = result.rows[0];
         updatedDelivery.priority_label = getPriorityLabel(updatedDelivery.priority);
         
