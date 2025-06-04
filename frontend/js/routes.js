@@ -87,12 +87,13 @@ function getPriorityLabel(priority) {
 }
 
 function getPriorityColor(priority) {
-    switch(parseInt(priority)) {
-        case 3: return '#dc3545';
-        case 2: return '#fd7e14';
-        case 1: return '#ffc107';
-        default: return '#28a745';
-    }
+    const colors = {
+        3: '#dc3545', // Vermelho - Urgente
+        2: '#fd7e14', // Laranja - Alta  
+        1: '#ffc107', // Amarelo - Média
+        0: '#28a745'  // Verde - Normal
+    };
+    return colors[parseInt(priority)] || '#28a745'; // Verde como fallback
 }
 
 function getPriorityEmoji(priority) {
@@ -318,15 +319,14 @@ function updateMapMarkers(itemsToMark) {
             return;
         }
 
-        const markerLabel = typeof item.indexInRoute !== 'undefined' ? (item.indexInRoute + 1).toString() : (idx + 1).toString();
-        const markerIconConfig = {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(item.priority || 0),
-            fillOpacity: 0.9,
-            strokeColor: 'white',
-            strokeWeight: 2
-        };
+    const markerIconConfig = {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(parseInt(item.priority) || 0),
+        fillOpacity: 0.9,
+        strokeColor: 'white',
+        strokeWeight: 2
+    };
 
         const marker = new google.maps.Marker({
             position: { lat: parseFloat(item.lat), lng: parseFloat(item.lng) },
