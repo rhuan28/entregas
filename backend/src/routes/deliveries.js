@@ -97,36 +97,41 @@ router.get('/routes', async (req, res) => {
         const { includeArchived = 'false' } = req.query;
         const db = getDb(req);
 
-        // 1. Buscar configurações de preço
+        // 1. Buscar configurações de preço e tempo de parada
+
         const settingsResult = await db.query(
-            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('daily_rate', 'km_rate')"
+            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('daily_rate', 'km_rate', 'stop_time')" // Adiciona 'stop_time'
+
         );
-        const pricingSettings = {};
+        const appSettings = {};
         settingsResult.rows.forEach(row => {
-            pricingSettings[row.setting_key] = parseFloat(row.setting_value) || 0;
+            appSettings[row.setting_key] = parseFloat(row.setting_value) || 0;
         });
-        const dailyRate = pricingSettings.daily_rate || 100; // Valor padrão se não configurado
-        const kmRate = pricingSettings.km_rate || 2.5;     // Valor padrão se não configurado
+        const dailyRate = appSettings.daily_rate || 100;
+        const kmRate = appSettings.km_rate || 2.5;
+        const stopTimePerDelivery = appSettings.stop_time || 8; // Tempo de parada em minutos, padrão 8
+
 
         // 2. Buscar rotas
+
         let whereClause = includeArchived === 'true' ? '' : 'WHERE (r.archived = false OR r.archived IS NULL)';
-        // A query principal para buscar rotas (incluindo r.total_distance)
         const query = `
             SELECT 
                 r.id,
                 r.route_date,
                 r.status,
                 r.total_distance,
-                r.total_duration,
+                r.total_duration, -- Duração em segundos do Google
                 r.optimized_order,
                 r.route_config,
                 r.archived,
                 r.archived_at,
-                COUNT(DISTINCT d.id) as delivery_count,
+                COUNT(DISTINCT d.id) as delivery_count, -- Total de paradas que são entregas
                 COUNT(DISTINCT CASE WHEN d.status = 'delivered' THEN d.id END) as delivered_count
             FROM routes r 
             LEFT JOIN deliveries d ON r.route_date = d.order_date 
             ${whereClause}
+
             GROUP BY r.id, r.route_date, r.status, r.total_distance, r.total_duration, 
                      r.optimized_order, r.route_config, r.archived, r.archived_at
             ORDER BY r.route_date DESC
@@ -135,10 +140,22 @@ router.get('/routes', async (req, res) => {
         
         const result = await db.query(query);
 
-        // 3. Calcular valor e parsear JSON para cada rota
+        // 3. Calcular valor e TEMPO COM PARADAS, e parsear JSON para cada rota
+
         const routesWithData = result.rows.map(route => {
-            const distanceKm = route.total_distance ? (route.total_distance / 1000) : 0;
-            const valor_total_rota = dailyRate + (distanceKm * kmRate);
+            // Cálculo do valor (usando arredondamento prévio da distância)
+
+            const distanceInKmRaw = route.total_distance ? (route.total_distance / 1000) : 0;
+            const distanceKmRounded = parseFloat(distanceInKmRaw.toFixed(1));
+            const valor_total_rota_calculated = dailyRate + (distanceKmRounded * kmRate);
+
+            // Cálculo do tempo total com paradas
+
+            const routeDurationMinutes = route.total_duration ? Math.round(route.total_duration / 60) : 0;
+            // route.delivery_count já conta as entregas (não paradas de pickup)
+
+            const numberOfActualDeliveries = parseInt(route.delivery_count) || 0; 
+            const total_duration_with_stops = routeDurationMinutes + (numberOfActualDeliveries * stopTimePerDelivery);
 
             return {
                 ...route,
@@ -148,13 +165,15 @@ router.get('/routes', async (req, res) => {
                 route_config: route.route_config ? 
                     (typeof route.route_config === 'string' ? 
                         JSON.parse(route.route_config) : route.route_config) : null,
-                valor_total_rota: parseFloat(valor_total_rota.toFixed(2)) // Garante número com 2 casas decimais
+                valor_total_rota: parseFloat(valor_total_rota_calculated.toFixed(2)),
+                total_duration_with_stops: total_duration_with_stops // Novo campo
+
             };
         });
         
         res.json(routesWithData);
     } catch (error) {
-        console.error('Erro ao buscar rotas com valor:', error);
+        console.error('Erro ao buscar rotas com valor e tempo de parada:', error);
         res.status(500).json({ error: error.message });
     }
 });

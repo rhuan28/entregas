@@ -54,239 +54,219 @@
         });
         
         async function loadRoutes() {
-            try {
-                // Este endpoint do backend agora retorna 'valor_total_rota'
-                const response = await fetch(`${API_URL}/deliveries/routes`); 
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                try {
+                    const response = await fetch(`${API_URL}/deliveries/routes`); 
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const routes = await response.json(); // Agora 'routes' contém 'total_duration_with_stops'
+
+                    const routesList = document.getElementById('routes-list');
+                    routesList.innerHTML = '';
+                    
+                    if (routes.length === 0) {
+                        routesList.innerHTML = '<p class="text-center text-muted">Nenhuma rota cadastrada</p>';
+                        return;
+                    }
+                    
+                    routes.forEach(route => {
+                        const routeCard = document.createElement('div');
+                        routeCard.className = 'route-card';
+                        routeCard.onclick = (e) => {
+                            if (e.target.closest('.route-action-button')) {
+                                return;
+                            }
+                            const cleanDate = route.route_date.split('T')[0];
+                            openRoute(cleanDate);
+                        };
+                        
+                        // ... (formatação da data, statusText, statusClass, canCompleteRoute, completeButtonHtml como antes) ...
+
+                        let formattedDate = 'Data Inválida';
+                        let cleanDate = route.route_date;
+                        try {
+                            if (route.route_date) {
+                                cleanDate = route.route_date.split('T')[0];
+                                const routeDateObj = new Date(cleanDate + 'T12:00:00Z');
+                                if (!isNaN(routeDateObj.getTime())) {
+                                    formattedDate = routeDateObj.toLocaleDateString('pt-BR', {
+                                        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Sao_Paulo'
+
+                                    });
+                                }
+                            }
+                        } catch (e) { console.error('Erro ao formatar data:', e); }
+                        
+                        const today = new Date().toISOString().split('T')[0];
+                        const isToday = cleanDate === today;
+                        
+                        const statusText = { /* ... */ };
+                        const statusClass = { /* ... */ };
+                        const canCompleteRoute = route.status === 'planned' || route.status === 'active';
+                        const completeButtonHtml = canCompleteRoute ? `
+                            <button class="route-action-button complete-route-btn" 
+                                    onclick="manuallyCompleteRoute(${route.id}, '${route.status}', event)" 
+                                    title="Concluir Rota Manualmente">
+                                ✅
+                            </button>` : '';
+
+                        // USA O NOVO CAMPO total_duration_with_stops PARA EXIBIÇÃO DO TEMPO
+
+                        const tempoEstimadoDisplay = route.total_duration_with_stops ? `<span>⏱️ ${route.total_duration_with_stops} min</span>` : (route.total_duration ? `<span>⏱️ ${Math.round(route.total_duration/60)} min (desloc.)</span>` : '');
+
+
+                        routeCard.innerHTML = `
+
+                            <div class="route-card-header">
+                                <h3>${formattedDate} ${isToday ? '<span style="color: #E5B5B3;">(Hoje)</span>' : ''}</h3>
+                                <div class="route-actions">
+                                    ${completeButtonHtml}
+                                    <button class="route-action-button archive-route-btn" onclick="archiveRoute(${route.id}, event)" title="Arquivar rota">
+                                        🗃️
+                                    </button>
+                                    <button class="route-action-button delete-route-btn" onclick="deleteRoute('${cleanDate}', '${route.status}', event)" title="Excluir rota">
+                                        🗑️
+                                    </button>
+                                </div>                        
+                            </div>
+                            <div class="route-stats">
+                                <span>📦 ${route.delivery_count || 0} entregas</span>
+                                ${route.delivered_count !== null && route.delivered_count !== undefined ? `<span>✅ ${route.delivered_count} entregues</span>` : ''}
+                                <span class="status ${statusClass[route.status || 'planned']}">${statusText[route.status || 'planned']}</span>
+                                ${route.total_distance ? `<span>🚗 ${(route.total_distance/1000).toFixed(1)} km</span>` : ''}
+                                ${tempoEstimadoDisplay} {/* << TEMPO MODIFICADO AQUI */}
+                                ${route.valor_total_rota !== undefined ? `<span class="route-value">💲 R$ ${route.valor_total_rota.toFixed(2)}</span>` : ''}
+
+                            </div>
+                        `;
+                        
+                        routesList.appendChild(routeCard);
+                    });
+                } catch (error) {
+                    console.error('Erro ao carregar rotas:', error);
+                    const routesList = document.getElementById('routes-list');
+                    if (routesList) {
+                        routesList.innerHTML = '<p class="text-center text-muted">Erro ao carregar rotas. Verifique se o servidor está ativo.</p>';
+                    }
                 }
-                
-                const routes = await response.json();
-                const routesList = document.getElementById('routes-list');
-                routesList.innerHTML = ''; // Limpa a lista antes de adicionar novos itens
-                
-                if (routes.length === 0) {
-                    routesList.innerHTML = '<p class="text-center text-muted">Nenhuma rota cadastrada</p>';
+            }
+            
+            // ... (resto das funções: createNewRoute, openRoute, deleteRoute, archiveRoute, manuallyCompleteRoute, showToast) ...
+            // A função showToast, createNewRoute, openRoute, deleteRoute, archiveRoute, manuallyCompleteRoute permanecem as mesmas da resposta anterior.
+            function createNewRoute() {
+                const date = document.getElementById('new-route-date').value;
+                if (!date) {
+                    showToast('Por favor, selecione uma data', 'error');
                     return;
                 }
-                
-                routes.forEach(route => {
-                    const routeCard = document.createElement('div');
-                    routeCard.className = 'route-card';
-                    // Adiciona um listener de clique ao card principal, exceto se o clique for em um botão de ação
-                    routeCard.onclick = (e) => {
-                        if (e.target.closest('.route-action-button')) { // Adicione esta classe aos botões de ação
-                            return; // Não faz nada se o clique foi em um botão de ação
-                        }
-                        const cleanDate = route.route_date.split('T')[0];
-                        openRoute(cleanDate);
-                    };
-                    
-                    let formattedDate = 'Data Inválida';
-                    let cleanDate = route.route_date;
-                    
-                    try {
-                        if (route.route_date) {
-                            cleanDate = route.route_date.split('T')[0];
-                            // Usar T12:00:00Z para consistência na exibição da data
-                            const routeDateObj = new Date(cleanDate + 'T12:00:00Z');
-                            if (!isNaN(routeDateObj.getTime())) {
-                                formattedDate = routeDateObj.toLocaleDateString('pt-BR', {
-                                    weekday: 'long',
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    timeZone: 'America/Sao_Paulo' // Garante a formatação para o fuso de SP
-                                });
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Erro ao formatar data:', e);
+                window.location.href = `routes.html?date=${date}`;
+            }
+            
+            function openRoute(date) {
+                window.location.href = `routes.html?date=${date}`;
+            }
+            
+            async function deleteRoute(date, status, event) {
+                event.stopPropagation(); 
+                if (!confirm(`Tem certeza que deseja excluir esta rota de ${new Date(date + 'T12:00:00Z').toLocaleDateString('pt-BR', {timeZone: 'America/Sao_Paulo'})}? Todas as entregas do dia também serão removidas.`)) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_URL}/deliveries/clear/${date}`, { 
+                        method: 'DELETE'
+                    });
+                    if (response.ok) {
+                        showToast('Rota e entregas associadas foram excluídas com sucesso!', 'success');
+                        loadRoutes(); 
+                    } else {
+                        const data = await response.json();
+                        throw new Error(data.error || 'Erro ao excluir rota');
                     }
-                    
-                    const today = new Date().toISOString().split('T')[0];
-                    const isToday = cleanDate === today;
-                    
-                    const statusText = {
-                        'planned': 'Planejada',
-                        'active': 'Em andamento',
-                        'completed': 'Concluída',
-                        'cancelled': 'Cancelada'
-                    };
-                    
-                    const statusClass = {
-                        'planned': 'status-pending',
-                        'active': 'status-in_transit',
-                        'completed': 'status-delivered',
-                        'cancelled': 'status-cancelled'
-                    };
-
-                    // Lógica para mostrar/ocultar botão "Concluir Rota"
-                    const canCompleteRoute = route.status === 'planned' || route.status === 'active';
-                    const completeButtonHtml = canCompleteRoute ? `
-                        <button class="route-action-button complete-route-btn" 
-                                onclick="manuallyCompleteRoute(${route.id}, '${route.status}', event)" 
-                                title="Concluir Rota Manualmente">
-                            ✅
-                        </button>` : '';
-
-                    routeCard.innerHTML = `
-                        <div class="route-card-header">
-                            <h3>${formattedDate} ${isToday ? '<span style="color: #E5B5B3;">(Hoje)</span>' : ''}</h3>
-                            <div class="route-actions">
-                                ${completeButtonHtml}
-                                <button class="route-action-button archive-route-btn" onclick="archiveRoute(${route.id}, event)" title="Arquivar rota">
-                                    🗃️
-                                </button>
-                                <button class="route-action-button delete-route-btn" onclick="deleteRoute('${cleanDate}', '${route.status}', event)" title="Excluir rota">
-                                    🗑️
-                                </button>
-                            </div>                        
-                        </div>
-                        <div class="route-stats">
-                            <span>📦 ${route.delivery_count || 0} entregas</span>
-                            ${route.delivered_count !== null && route.delivered_count !== undefined ? `<span>✅ ${route.delivered_count} entregues</span>` : ''}
-                            <span class="status ${statusClass[route.status || 'planned']}">${statusText[route.status || 'planned']}</span>
-                            ${route.total_distance ? `<span>🚗 ${(route.total_distance/1000).toFixed(1)} km</span>` : ''}
-                            ${route.total_duration ? `<span>⏱️ ${Math.round(route.total_duration/60)} min</span>` : ''}
-                            ${route.valor_total_rota !== undefined ? `<span class="route-value">💲 R$ ${route.valor_total_rota.toFixed(2)}</span>` : ''}
-                        </div>
-                    `;
-                    
-                    routesList.appendChild(routeCard);
-                });
-            } catch (error) {
-                console.error('Erro ao carregar rotas:', error);
-                const routesList = document.getElementById('routes-list');
-                if (routesList) {
-                    routesList.innerHTML = '<p class="text-center text-muted">Erro ao carregar rotas. Verifique se o servidor está ativo.</p>';
+                } catch (error) {
+                    console.error('Erro ao excluir rota:', error);
+                    showToast('Erro ao excluir rota: ' + error.message, 'error');
                 }
             }
-        }
-        
-        function createNewRoute() {
-            const date = document.getElementById('new-route-date').value;
-            if (!date) {
-                showToast('Por favor, selecione uma data', 'error');
-                return;
-            }
-            window.location.href = `routes.html?date=${date}`;
-        }
-        
-        function openRoute(date) {
-            window.location.href = `routes.html?date=${date}`;
-        }
-        
-        async function deleteRoute(date, status, event) {
-            event.stopPropagation(); // Impede o clique no card
-            if (!confirm(`Tem certeza que deseja excluir esta rota de ${new Date(date + 'T12:00:00Z').toLocaleDateString('pt-BR', {timeZone: 'America/Sao_Paulo'})}? Todas as entregas do dia também serão removidas.`)) {
-                return;
-            }
-            try {
-                // O backend /deliveries/clear/:date remove a rota e suas entregas
-                const response = await fetch(`${API_URL}/deliveries/clear/${date}`, { 
-                    method: 'DELETE'
-                });
-                if (response.ok) {
-                    showToast('Rota e entregas associadas foram excluídas com sucesso!', 'success');
-                    loadRoutes(); 
-                } else {
-                    const data = await response.json();
-                    throw new Error(data.error || 'Erro ao excluir rota');
+
+            async function archiveRoute(routeId, event) {
+                event.stopPropagation();
+                if (!confirm('Tem certeza que deseja arquivar esta rota? Ela será movida para o arquivo.')) {
+                    return;
                 }
-            } catch (error) {
-                console.error('Erro ao excluir rota:', error);
-                showToast('Erro ao excluir rota: ' + error.message, 'error');
-            }
-        }
-
-        async function archiveRoute(routeId, event) {
-            event.stopPropagation();
-            if (!confirm('Tem certeza que deseja arquivar esta rota? Ela será movida para o arquivo.')) {
-                return;
-            }
-            try {
-                const response = await fetch(`${API_URL}/archive/routes/${routeId}`, { 
-                    method: 'POST' 
-                });
-                if (response.ok) {
-                    showToast('Rota arquivada com sucesso!', 'success');
-                    loadRoutes(); 
-                } else {
-                    const error = await response.json();
-                    showToast('Erro ao arquivar rota: ' + (error.error || 'Erro desconhecido'), 'error');
-                }
-            } catch (error) {
-                console.error('Erro ao arquivar rota:', error);
-                showToast('Erro ao arquivar rota', 'error');
-            }
-        }
-
-        // NOVA FUNÇÃO para concluir a rota manualmente
-        async function manuallyCompleteRoute(routeId, currentStatus, event) {
-            event.stopPropagation(); // Impede o clique no card de abrir a rota
-
-            if (currentStatus === 'completed') {
-                showToast('Esta rota já está marcada como concluída.', 'info');
-                return;
-            }
-            if (currentStatus === 'cancelled') {
-                showToast('Não é possível concluir uma rota que foi cancelada.', 'info');
-                return;
-            }
-
-            if (!confirm('Tem certeza que deseja marcar esta rota como concluída? Todas as entregas pendentes ou em trânsito associadas a esta rota também serão marcadas como entregues.')) {
-                return;
-            }
-
-            try {
-                // Chamada ao novo endpoint do backend
-                const response = await fetch(`${API_URL}/deliveries/routes/${routeId}/complete`, { 
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
+                try {
+                    const response = await fetch(`${API_URL}/archive/routes/${routeId}`, { 
+                        method: 'POST' 
+                    });
+                    if (response.ok) {
+                        showToast('Rota arquivada com sucesso!', 'success');
+                        loadRoutes(); 
+                    } else {
+                        const error = await response.json();
+                        showToast('Erro ao arquivar rota: ' + (error.error || 'Erro desconhecido'), 'error');
                     }
-                    // Não é necessário body se o backend só precisa do ID da rota
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(result.message || 'Rota marcada como concluída com sucesso!', 'success');
-                    loadRoutes(); // Recarrega a lista de rotas para refletir a mudança de status
-                } else {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Erro ${response.status} ao tentar concluir a rota.`);
+                } catch (error) {
+                    console.error('Erro ao arquivar rota:', error);
+                    showToast('Erro ao arquivar rota', 'error');
                 }
-            } catch (error) {
-                console.error('Erro ao concluir rota manualmente:', error);
-                showToast('Erro ao concluir rota: ' + error.message, 'error');
             }
-        }
 
-        // Função de Toast (já existente no seu código, pode ser mantida ou usar esta)
-        function showToast(message, type = 'info') {
-            // Implementação do seu Toast aqui (se já tiver uma, use-a)
-            // Exemplo simples:
-            const toastContainer = document.body; 
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`; // Certifique-se que 'toast' e 'toast-success/error/info' estão no seu CSS
-            
-            let icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
-            
-            toast.innerHTML = `<span style="margin-right: 8px;">${icon}</span> ${message}`;
-            toastContainer.appendChild(toast);
-            
-            // Remove o toast após alguns segundos
-            setTimeout(() => {
-                if (toast.parentElement) {
-                    toast.style.opacity = '0'; // Para transição suave
-                    setTimeout(() => {
-                        if (toast.parentElement) toastContainer.removeChild(toast);
-                    }, 300); // Tempo da transição
+            async function manuallyCompleteRoute(routeId, currentStatus, event) {
+                event.stopPropagation(); 
+
+                if (currentStatus === 'completed') {
+                    showToast('Esta rota já está marcada como concluída.', 'info');
+                    return;
                 }
-            }, 4000);
-        }
-    </script>
+                if (currentStatus === 'cancelled') {
+                    showToast('Não é possível concluir uma rota que foi cancelada.', 'info');
+                    return;
+                }
+
+                if (!confirm('Tem certeza que deseja marcar esta rota como concluída? Todas as entregas pendentes ou em trânsito associadas a esta rota também serão marcadas como entregues.')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_URL}/deliveries/routes/${routeId}/complete`, { 
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        showToast(result.message || 'Rota marcada como concluída com sucesso!', 'success');
+                        loadRoutes(); 
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Erro ${response.status} ao tentar concluir a rota.`);
+                    }
+                } catch (error) {
+                    console.error('Erro ao concluir rota manualmente:', error);
+                    showToast('Erro ao concluir rota: ' + error.message, 'error');
+                }
+            }
+
+            function showToast(message, type = 'info') {
+                const toastContainer = document.body; 
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`; 
+                let icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+                toast.innerHTML = `<span style="margin-right: 8px;">${icon}</span> ${message}`;
+                toastContainer.appendChild(toast);
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.style.opacity = '0';
+                        setTimeout(() => {
+                            if (toast.parentElement) toastContainer.removeChild(toast);
+                        }, 300);
+                    }
+                }, 4000);
+            }
+
+        </script>
     </body>
     </html>
