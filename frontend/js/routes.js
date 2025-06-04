@@ -402,18 +402,31 @@ function showOptimizedRoute(route) {
                 type: 'pickup',
                 customer_name: 'Confeitaria Demiplié',
                 product_description: 'Parada na confeitaria',
-                priority: item.priority || 0,
+                priority: 0, // ← ADICIONADO
                 order: item.order
             };
         } else {
             const fullDeliveryDetails = (deliveryData || []).find(d => d.id === item.deliveryId);
             stopDetails = {
-                ...item,
+                ...fullDeliveryDetails, // ← Dados completos primeiro
+                ...item,               // ← Sobrescreve apenas necessário
+                id: item.deliveryId,
+                type: 'delivery',
                 customer_name: fullDeliveryDetails?.customer_name || item.customer_name || 'Cliente Desconhecido',
-                product_description: fullDeliveryDetails?.product_description || item.product_description || 'Produto não especificado',
+                indexInRoute: index
             };
         }
-        
+
+        allStopsForDisplay.push({ ...stopDetails, indexInRoute: index }); // ← SÓ ESTA LINHA
+
+        // Log para debug
+        console.log(`Stop ${index}:`, {
+            id: stopDetails.id,
+            priority: stopDetails.priority,
+            type: stopDetails.type,
+            customer_name: stopDetails.customer_name
+        });
+
         if (stopDetails.address) {
             orderedWaypoints.push({
                 location: stopDetails.address,
@@ -422,7 +435,6 @@ function showOptimizedRoute(route) {
         } else {
             console.warn("Parada sem endereço não será adicionada aos waypoints:", stopDetails);
         }
-        allStopsForDisplay.push({ ...stopDetails, indexInRoute: index });
     });
 
     if (orderedWaypoints.length === 0) {
