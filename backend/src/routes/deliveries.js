@@ -96,9 +96,21 @@ router.get('/routes', async (req, res) => {
     try {
         const { includeArchived = 'false' } = req.query;
         const db = getDb(req);
-        
-        let whereClause = includeArchived === 'true' ? '' : 'WHERE r.archived = false OR r.archived IS NULL';
-        
+
+        // 1. Buscar configurações de preço
+        const settingsResult = await db.query(
+            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('daily_rate', 'km_rate')"
+        );
+        const pricingSettings = {};
+        settingsResult.rows.forEach(row => {
+            pricingSettings[row.setting_key] = parseFloat(row.setting_value) || 0;
+        });
+        const dailyRate = pricingSettings.daily_rate || 100; // Valor padrão se não configurado
+        const kmRate = pricingSettings.km_rate || 2.5;     // Valor padrão se não configurado
+
+        // 2. Buscar rotas
+        let whereClause = includeArchived === 'true' ? '' : 'WHERE (r.archived = false OR r.archived IS NULL)';
+        // A query principal para buscar rotas (incluindo r.total_distance)
         const query = `
             SELECT 
                 r.id,
@@ -122,21 +134,27 @@ router.get('/routes', async (req, res) => {
         `;
         
         const result = await db.query(query);
+
+        // 3. Calcular valor e parsear JSON para cada rota
+        const routesWithData = result.rows.map(route => {
+            const distanceKm = route.total_distance ? (route.total_distance / 1000) : 0;
+            const valor_total_rota = dailyRate + (distanceKm * kmRate);
+
+            return {
+                ...route,
+                optimized_order: route.optimized_order ? 
+                    (typeof route.optimized_order === 'string' ? 
+                        JSON.parse(route.optimized_order) : route.optimized_order) : null,
+                route_config: route.route_config ? 
+                    (typeof route.route_config === 'string' ? 
+                        JSON.parse(route.route_config) : route.route_config) : null,
+                valor_total_rota: parseFloat(valor_total_rota.toFixed(2)) // Garante número com 2 casas decimais
+            };
+        });
         
-        // Parse JSON fields safely
-        const routesWithParsedData = result.rows.map(route => ({
-            ...route,
-            optimized_order: route.optimized_order ? 
-                (typeof route.optimized_order === 'string' ? 
-                    JSON.parse(route.optimized_order) : route.optimized_order) : null,
-            route_config: route.route_config ? 
-                (typeof route.route_config === 'string' ? 
-                    JSON.parse(route.route_config) : route.route_config) : null
-        }));
-        
-        res.json(routesWithParsedData);
+        res.json(routesWithData);
     } catch (error) {
-        console.error('Erro ao buscar rotas:', error);
+        console.error('Erro ao buscar rotas com valor:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -781,6 +799,63 @@ router.post('/:id/complete', async (req, res) => {
     } catch (error) {
         console.error('Erro ao completar entrega:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// NOVO ENDPOINT: Marcar rota como concluída manualmente
+router.put('/routes/:id/complete', async (req, res) => {
+    const { id } = req.params;
+    const db = getDb(req);
+
+    try {
+        const routeResult = await db.query(
+            'SELECT route_date, status FROM routes WHERE id = $1',
+            [id]
+        );
+
+        if (routeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Rota não encontrada.' });
+        }
+
+        const route = routeResult.rows[0];
+        if (route.status === 'completed') {
+            return res.status(400).json({ error: 'Rota já está concluída.' });
+        }
+        if (route.status === 'cancelled') {
+            return res.status(400).json({ error: 'Não é possível concluir uma rota cancelada.' });
+        }
+
+        await db.transaction(async (client) => {
+            // Atualiza o status da rota para 'completed'
+
+            await client.query(
+                'UPDATE routes SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                ['completed', id]
+            );
+
+            // Atualiza o status das entregas associadas para 'delivered'
+
+            // Apenas aquelas que estão pendentes, otimizadas ou em trânsito
+
+            const deliveryUpdateResult = await client.query(
+                `UPDATE deliveries 
+                 SET status = 'delivered', updated_at = CURRENT_TIMESTAMP 
+                 WHERE order_date = $1 AND status IN ('pending', 'optimized', 'in_transit')`,
+                [route.route_date]
+            );
+            console.log(`Entregas atualizadas para 'delivered' para rota ${id} (data ${route.route_date}): ${deliveryUpdateResult.rowCount}`);
+        });
+
+        const io = req.app.get('socketio');
+        if (io) {
+            io.emit('route-updated', { routeId: id, status: 'completed' });
+        }
+
+        res.json({ message: `Rota ${id} marcada como concluída com sucesso.` });
+
+    } catch (error) {
+        console.error(`Erro ao concluir rota ${id}:`, error);
+        res.status(500).json({ error: 'Erro interno ao tentar concluir a rota.' });
     }
 });
 

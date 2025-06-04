@@ -1751,3 +1751,45 @@ textarea:focus-visible {
         padding: 12px;
     }
 }   
+
+.route-actions .route-action-button {
+    background: none;
+    border: none;
+    color: var(--text-light); /* Cor padrão para ícones de ação */
+    font-size: 1.1rem; /* Tamanho do ícone/emoji */
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    line-height: 1; /* Para alinhar melhor emojis/ícones */
+    margin-left: 4px; /* Espaçamento entre botões de ação */
+}
+
+.route-actions .route-action-button:hover {
+    transform: scale(1.15); /* Efeito de hover sutil */
+    opacity: 0.8;
+}
+
+.route-actions .complete-route-btn {
+    color: var(--success-color); /* Verde para o botão de concluir */
+}
+.route-actions .complete-route-btn:hover {
+    color: #45a049; /* Verde um pouco mais escuro no hover */
+}
+
+.route-actions .archive-route-btn:hover {
+    color: var(--text-medium);
+}
+
+.route-actions .delete-route-btn {
+    color: var(--danger-color);
+}
+.route-actions .delete-route-btn:hover {
+    color: #d32f2f; /* Vermelho um pouco mais escuro no hover */
+}
+
+/* Estilo para o valor da rota */
+.route-stats .route-value {
+    color: var(--success-color); /* Cor para o valor, pode ser ajustada */
+    font-weight: 500; /* Ou bold, conforme preferência */
+}
