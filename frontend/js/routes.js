@@ -273,9 +273,9 @@ function initMap() {
         new google.maps.Marker({
             position: initialCenter,
             map: map,
-            title: 'Confeitaria Demiplié',
+            title: 'Demiplié',
             icon: {
-                url: 'assets/logo-demiplie.png',
+                url: 'assets/icon-sq.png',
                 scaledSize: new google.maps.Size(35, 35),
                 anchor: new google.maps.Point(17, 35)
             },
