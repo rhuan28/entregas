@@ -201,7 +201,7 @@ function initMap() {
             map: map,
             title: 'Confeitaria Demiplié',
             icon: {
-                url: 'assets/logo-demiplie.png',
+                url: 'assets/icon-sq.png',
                 scaledSize: new google.maps.Size(35, 35),
                 anchor: new google.maps.Point(17, 35)
             },
