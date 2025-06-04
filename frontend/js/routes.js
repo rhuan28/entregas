@@ -313,6 +313,17 @@ function updateMapMarkers(itemsToMark) {
     clearMarkers();
     if (!itemsToMark || typeof google === 'undefined' || !google.maps) return;
 
+        // ADICIONE ESTES LOGS:
+    console.log('🎯 Marcadores recebidos:', itemsToMark.length);
+    itemsToMark.forEach((item, idx) => {
+        console.log(`Item ${idx}:`, {
+            id: item.id,
+            type: item.type,
+            priority: item.priority,
+            customer_name: item.customer_name
+        });
+    });
+
     itemsToMark.forEach((item, idx) => {
         if (!item || typeof item.lat === 'undefined' || typeof item.lng === 'undefined') {
             console.warn("Item inválido ou sem coordenadas para marcar:", item);
