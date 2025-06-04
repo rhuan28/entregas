@@ -219,9 +219,9 @@ function initMap() {
 window.onGoogleMapsApiLoaded = function() {
     console.log("Google Maps API carregada via callback.");
     initMap();
-    if (typeof loadPageData === "function") { // Se tiver uma função principal de carregamento
+    if (typeof loadPageData === "function") {
         loadPageData();
-    } else { // Fallback para carregar settings e deliveries se não houver uma principal
+    } else {
         if (typeof loadSettings === "function") loadSettings();
         if (typeof loadDeliveries === "function") loadDeliveries();
     }
@@ -295,9 +295,6 @@ function showOptimizedRoute(route) {
     const orderedWaypoints = [];
     const allStopsForDisplay = [];
 
-    // Usa confeitariaLocation global que é atualizada por loadSettings
-    // const currentConfeitariaLocation = { ...confeitariaLocation };
-
     if (!route || !route.optimizedOrder || route.optimizedOrder.length === 0) {
         console.warn("showOptimizedRoute chamada sem optimizedOrder válido ou com optimizedOrder vazio.");
         if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
@@ -352,20 +349,18 @@ function showOptimizedRoute(route) {
     let waypointsForAPIRequest = [];
     let destinationForAPIRequest;
 
-    if (orderedWaypoints.length === 1) { // Apenas um destino (além da origem)
+    if (orderedWaypoints.length === 1) {
         destinationForAPIRequest = orderedWaypoints[0].location;
-    } else { // Múltiplas paradas
-        // Todos os endereços em orderedWaypoints, exceto o último, são waypoints
+    } else {
         waypointsForAPIRequest = orderedWaypoints.slice(0, -1).map(wp => ({ location: wp.location, stopover: true }));
         destinationForAPIRequest = orderedWaypoints[orderedWaypoints.length - 1].location;
     }
 
-    // Se a rota é circular, o destino final é a origem, e todas as paradas em orderedWaypoints são waypoints
     if (settings.circular_route === 'true') {
         if (orderedWaypoints.length > 0) {
             waypointsForAPIRequest = orderedWaypoints.map(wp => ({ location: wp.location, stopover: true }));
         }
-        destinationForAPIRequest = origin; // Destino é a confeitaria
+        destinationForAPIRequest = origin;
     }
     
     const request = {
@@ -564,7 +559,6 @@ async function checkExistingRoute(date) {
                 if (currentRoute.routeConfig.originAddress) {
                     settings.origin_address = currentRoute.routeConfig.originAddress;
                     confeitariaLocation.address = settings.origin_address;
-                    // Idealmente, geocodificar aqui para atualizar lat/lng da confeitariaLocation se mudou
                 }
             } else {
                  manualOrder = {};
@@ -611,7 +605,7 @@ function updateRouteStats() {
     const totalPriceEl = document.getElementById('total-price');
     const shareRouteBtn = document.getElementById('share-route');
 
-    const actualDeliveryItems = deliveryData.filter(d => d.type !== 'pickup'); // Somente entregas reais
+    const actualDeliveryItems = deliveryData.filter(d => d.type !== 'pickup');
     if (totalDeliveriesEl) totalDeliveriesEl.textContent = actualDeliveryItems.length;
 
     if (currentRoute && currentRoute.optimizedOrder && currentRoute.optimizedOrder.length > 0) {
@@ -761,12 +755,9 @@ function shareRoute() {
         showToast('Otimize a rota primeiro para poder compartilhar.', 'info');
         return;
     }
-
     let googleMapsUrl = 'https://www.google.com/maps/dir/?api=1';
     googleMapsUrl += `&origin=${encodeURIComponent(settings.origin_address)}`;
-
     const waypointsAddresses = currentRoute.optimizedOrder.map(item => item.address);
-    
     if (settings.circular_route === 'true') {
         if (waypointsAddresses.length > 0) {
             googleMapsUrl += `&waypoints=${encodeURIComponent(waypointsAddresses.join('|'))}`;
@@ -778,7 +769,7 @@ function shareRoute() {
         }
         if (waypointsAddresses.length > 0) {
             googleMapsUrl += `&destination=${encodeURIComponent(waypointsAddresses[waypointsAddresses.length - 1])}`;
-        } else { // Sem paradas, destino é a origem (pouco provável para rota não circular)
+        } else {
             googleMapsUrl += `&destination=${encodeURIComponent(settings.origin_address)}`;
         }
     }
@@ -844,9 +835,9 @@ document.addEventListener('DOMContentLoaded', function() {
 let draggedElement = null;
 function handleDragStart(e) {
     draggedElement = this;
-    this.style.opacity = '0.5'; // Visual feedback
+    this.style.opacity = '0.5';
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', this.innerHTML); // Ou this.dataset.itemId
+    e.dataTransfer.setData('text/html', this.innerHTML);
 }
 function handleDragEnd(e) {
     this.style.opacity = '1';
@@ -871,7 +862,6 @@ function handleDrop(e) {
         const list = document.getElementById('deliveries-list');
         const targetIndex = Array.from(list.children).indexOf(this);
         const draggedIndex = Array.from(list.children).indexOf(draggedElement);
-
         if (draggedIndex < targetIndex) {
             list.insertBefore(draggedElement, this.nextSibling);
         } else {
@@ -880,7 +870,6 @@ function handleDrop(e) {
         updateManualOrderFromDOM();
     }
 }
-
 function updateManualOrderFromDOM() {
     const newManualOrder = {};
     const items = document.querySelectorAll('#deliveries-list .delivery-item');
@@ -888,7 +877,7 @@ function updateManualOrderFromDOM() {
         const itemId = itemElement.dataset.itemId;
         if (itemId) {
             newManualOrder[itemId] = index + 1;
-            const input = itemElement.querySelector(`#order-input-${itemId}`); // Seleciona pelo ID único
+            const input = itemElement.querySelector(`#order-input-${itemId}`);
             if (input) {
                 input.value = index + 1;
             }
@@ -896,14 +885,7 @@ function updateManualOrderFromDOM() {
     });
     manualOrder = newManualOrder;
     console.log("Ordem manual atualizada pelo DOM:", manualOrder);
-    // Após reordenar no DOM e atualizar `manualOrder`,
-    // você pode querer permitir que o usuário clique em "Otimizar Rota" novamente,
-    // que usará o novo `manualOrder`.
-    // Se a intenção é que a ordem do DOM seja a rota final *sem* reotimização do Google,
-    // então uma função para calcular a rota com a ordem fixa do DOM seria necessária.
-    // Por ora, a otimização sempre passará pelo backend.
 }
-
 
 // --- Configurações ---
 async function loadSettings() {
@@ -926,7 +908,6 @@ async function loadSettings() {
         if (kmRateEl) kmRateEl.value = settings.km_rate || '2.50';
 
         confeitariaLocation.address = settings.origin_address;
-        // Adicionar geocodificação para atualizar lat/lng de confeitariaLocation se origin_address mudou
         if (settings.origin_address !== confeitariaLocation.address && typeof google !== 'undefined' && google.maps) {
             const geocoder = new google.maps.Geocoder();
             geocoder.geocode({ 'address': settings.origin_address }, function(results, status) {
@@ -934,7 +915,7 @@ async function loadSettings() {
                     confeitariaLocation.lat = results[0].geometry.location.lat();
                     confeitariaLocation.lng = results[0].geometry.location.lng();
                     console.log("Localização da confeitaria atualizada por geocodificação:", confeitariaLocation);
-                     if (map) map.setCenter(results[0].geometry.location); // Centraliza mapa na nova origem
+                     if (map) map.setCenter(results[0].geometry.location);
                 } else {
                     console.warn('Falha ao geocodificar novo endereço da confeitaria:', status);
                 }
@@ -980,8 +961,7 @@ async function saveSettings() {
         });
         if (response.ok) {
             settings = { ...settings, ...newSettings };
-            confeitariaLocation.address = settings.origin_address; // Atualiza endereço da confeitaria
-            // Re-geocodificar para atualizar lat/lng
+            confeitariaLocation.address = settings.origin_address;
              if (typeof google !== 'undefined' && google.maps) {
                 const geocoder = new google.maps.Geocoder();
                 geocoder.geocode({ 'address': settings.origin_address }, function(results, status) {
@@ -990,11 +970,9 @@ async function saveSettings() {
                         confeitariaLocation.lng = results[0].geometry.location.lng();
                         if (map) {
                              map.setCenter(results[0].geometry.location);
-                             // Atualizar marcador da confeitaria
-                             // (requer ter uma referência ao marcador para atualizá-lo ou recriá-lo)
                         }
                         if (currentRoute && currentRoute.optimizedOrder && currentRoute.optimizedOrder.length > 0) {
-                            showOptimizedRoute(currentRoute); // Re-desenha a rota com a nova origem
+                            showOptimizedRoute(currentRoute);
                         }
                     }
                 });
@@ -1021,9 +999,9 @@ function addPickupStop() {
         lat: confeitariaLocation.lat,
         lng: confeitariaLocation.lng,
         address: confeitariaLocation.address,
-        order: 999 // Default order, to be adjusted or used by optimizer
+        order: 999
     });
-    manualOrder[newPickupId] = (Object.keys(manualOrder).length > 0 ? Math.max(...Object.values(manualOrder)) : 0) + 1;
+    manualOrder[newPickupId] = (Object.keys(manualOrder).length > 0 ? Math.max(...Object.values(manualOrder).filter(v => typeof v === 'number')) : 0) + 1;
     renderDeliveriesList();
     updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
     showToast("Parada na confeitaria adicionada.", "info");
@@ -1037,71 +1015,64 @@ function removePickupStop(stopId) {
     showToast("Parada na confeitaria removida.", "info");
 }
 
-/**
- * CORREÇÃO: Função updateManualOrder para selecionar o input pelo ID único.
- */
 function updateManualOrder(itemId, orderValue) {
     const order = parseInt(orderValue);
-    const inputElement = document.getElementById(`order-input-${itemId}`); // Seleciona pelo ID
+    const inputElement = document.getElementById(`order-input-${itemId}`);
 
     if (isNaN(order) || order < 1) {
         delete manualOrder[itemId];
         if (inputElement) {
-            inputElement.value = ''; // Limpa o campo no DOM
+            inputElement.value = '';
         }
     } else {
         manualOrder[itemId] = order;
-        // Opcional: Se quiser forçar o valor do input para o número parseado
-        // if (inputElement) {
-        // inputElement.value = order;
-        // }
     }
     console.log("Ordem manual para", itemId, "atualizada para", manualOrder[itemId]);
-    // A re-renderização da lista para refletir a ordem visual pode ser feita
-    // chamando renderDeliveriesList() aqui, mas pode ser custoso.
-    // A ordenação principal acontece em renderDeliveriesList e ao otimizar.
 }
 
 // --- Inicialização ---
 async function loadPageData() {
-    console.log('Página de rotas carregando...');
-    const routeDate = getRouteDate();
-    const routeDateElement = document.getElementById('route-date');
-    if (routeDateElement) {
-        try {
-            const dateObj = new Date(routeDate + 'T00:00:00Z');
-            const formattedDate = dateObj.toLocaleDateString('pt-BR', {
-                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Sao_Paulo'
-            });
-            routeDateElement.textContent = formattedDate;
-        } catch (e) {
-            routeDateElement.textContent = routeDate;
-            console.error("Erro ao formatar data:", e);
-        }
-    }
+    console.log('Iniciando carregamento principal de dados da página de rotas...');
     
     await loadSettings(); 
     
-    // Garante que o mapa seja inicializado SE a API do Google estiver pronta.
-    // Se a API carregar depois, onGoogleMapsApiLoaded() chamará initMap e depois esta função.
     if (typeof google !== 'undefined' && typeof google.maps !== 'undefined' && !map) {
-        initMap();
+        initMap(); // initMap agora usa confeitariaLocation que pode ter sido atualizada por loadSettings
     }
     
-    await loadDeliveries();
+    await loadDeliveries(); // Carrega entregas e rota existente
     
     if (typeof window.ensurePriorityFeatures === "function") window.ensurePriorityFeatures();
-    else if (typeof addPriorityLegend === "function") addPriorityLegend(); // Fallback
+    else if (typeof addPriorityLegend === "function") addPriorityLegend();
     
-    updateRouteStats();
+    updateRouteStats(); // Atualiza estatísticas finais
 }
 
-
 window.onload = async () => {
-    // Adiciona listeners para os botões de configuração do modal
+    const routeDateString = getRouteDate();
+    const routeDateElement = document.getElementById('route-date');
+
+    if (routeDateElement) {
+        try {
+            // CORREÇÃO DA DATA: Usar T12:00:00Z para meio-dia UTC
+            const dateObj = new Date(routeDateString + 'T12:00:00Z'); 
+            const formattedDate = dateObj.toLocaleDateString('pt-BR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: 'America/Sao_Paulo' // Importante para formatar no fuso correto
+            });
+            routeDateElement.textContent = formattedDate;
+        } catch (e) {
+            routeDateElement.textContent = routeDateString;
+            console.error("Erro ao formatar data:", e);
+        }
+    }
+
     const settingsBtn = document.getElementById('settings-btn');
-    const saveSettingsBtn = document.querySelector('#settings-modal .btn-primary'); // Mais específico
-    const cancelSettingsBtn = document.querySelector('#settings-modal .btn-secondary'); // Mais específico
+    const saveSettingsBtn = document.querySelector('#settings-modal .btn-primary');
+    const cancelSettingsBtn = document.querySelector('#settings-modal .btn-secondary');
     const closeSettingsIcon = document.querySelector('#settings-modal .close');
 
     if (settingsBtn) settingsBtn.onclick = openSettings;
@@ -1118,9 +1089,6 @@ window.onload = async () => {
         };
     }
 
-    // Chama a função principal de carregamento
-    // Se a API do Google Maps ainda não carregou, onGoogleMapsApiLoaded chamará loadPageData.
-    // Se já carregou, chamamos diretamente.
     if (typeof google !== 'undefined' && typeof google.maps !== 'undefined') {
         await loadPageData();
     } else {
@@ -1128,19 +1096,18 @@ window.onload = async () => {
         // onGoogleMapsApiLoaded (definido globalmente ou no callback da API) se encarregará de chamar loadPageData.
     }
 
-
     if (socket) {
         socket.on('connect', () => console.log('Socket.IO conectado (routes.js)'));
         socket.on('location-update', (data) => {
             if (currentRoute && data.routeId === currentRoute.routeId) {
-                if (!driverMarker && map) {
-                    driverMarker = new google.maps.Marker({ map: map, title: 'Entregador', icon: {/* ... */} });
+                if (!driverMarker && map && typeof google !== 'undefined' && google.maps) {
+                    driverMarker = new google.maps.Marker({ map: map, title: 'Entregador', /* icon: ... */ });
                 }
-                if (driverMarker) driverMarker.setPosition(new google.maps.LatLng(data.lat, data.lng));
+                if (driverMarker && typeof google !== 'undefined' && google.maps) driverMarker.setPosition(new google.maps.LatLng(data.lat, data.lng));
             }
         });
         socket.on('delivery-completed', (data) => {
-            const delivery = deliveryData.find(d => d.id === data.deliveryId);
+            const delivery = deliveryData.find(d => d.id === parseInt(data.deliveryId)); // Garanta que o ID seja comparado corretamente
             if (delivery) {
                 delivery.status = 'delivered';
                 renderDeliveriesList();
@@ -1152,9 +1119,9 @@ window.onload = async () => {
     }
 };
 
-// Exportar funções que precisam ser acessíveis globalmente pelo HTML (ex: onclick)
-window.editDelivery = window.editDelivery || function(id) {
-    const delivery = deliveryData.find(d => d.id == id);
+window.editDelivery = window.editDelivery || function(idString) {
+    const id = parseInt(idString); // Garante que o ID seja número para comparação
+    const delivery = deliveryData.find(d => d.id === id);
     if (!delivery) { showToast('Entrega não encontrada.', 'error'); return; }
     const fields = {
         'edit-delivery-id': delivery.id,
@@ -1164,7 +1131,7 @@ window.editDelivery = window.editDelivery || function(id) {
         'edit-address': delivery.address,
         'edit-product-select': delivery.product_type || '',
         'edit-product-description': delivery.product_description || '',
-        'edit-priority-select': delivery.priority || '0'
+        'edit-priority-select': delivery.priority !== undefined ? delivery.priority.toString() : '0'
     };
     for (const elId in fields) {
         const el = document.getElementById(elId);
@@ -1193,4 +1160,3 @@ window.showDeliveryOnMap = showDeliveryOnMap;
 window.deleteDelivery = deleteDelivery;
 window.generateTrackingLink = generateTrackingLink;
 window.completeDelivery = completeDelivery;
-// Funções do HTML como updateProductInfo e updateEditProductInfo já são globais
