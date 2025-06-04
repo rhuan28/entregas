@@ -146,17 +146,20 @@ function getRouteDate() {
     return urlParams.get('date') || new Date().toISOString().split('T')[0];
 }
 
-function getStatusLabel(status) {
+function getStatusLabel(status, itemType = 'delivery') {
+    if (itemType === 'pickup') {
+        return 'Parada na Confeitaria';
+    }
+    
     const labels = {
         'pending': 'Pendente',
-        'optimized': 'Otimizada',
+        'optimized': 'Otimizada', 
         'in_transit': 'Em Trânsito',
         'delivered': 'Entregue',
         'cancelled': 'Cancelada'
     };
     return labels[status] || status;
 }
-
 // --- Funções do Mapa e Autocomplete ---
 
 function initializeAddressAutocomplete() {
@@ -548,47 +551,75 @@ function renderDeliveriesList() {
 }
 
 function renderDeliveryItemContent(item, index) {
-    if (typeof window.renderDeliveryItem === 'function') {
-        return window.renderDeliveryItem(item, index);
-    }
-
-    const orderNumberDisplay = item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
-    const productDisplay = item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
-    const priorityEmoji = getPriorityEmoji(item.priority);
-
-    let content = `
-        <div class="delivery-header">
-            <h3>${item.customer_name} ${productDisplay}</h3>
-            <span class="priority priority-${getPriorityClass(item.priority)}" style="background-color: ${getPriorityColor(item.priority)}; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">
-                ${priorityEmoji} ${getPriorityLabel(item.priority)}
-            </span>
-        </div>
-        ${orderNumberDisplay}
-        <p><strong>📍 Endereço:</strong> ${item.address}</p>
-        <p><strong>📦 Produto:</strong> ${item.product_description}</p>
-        ${item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
-        <div class="delivery-actions">
-            <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
-                <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
-                <input type="number" id="order-input-${item.id}"
-                       class="order-input" 
-                       value="${manualOrder[item.id] || ''}" 
-                       min="1"
-                       onchange="updateManualOrder('${item.id}', this.value)"
-                       style="width:50px; padding:3px; text-align:center;">
+    if (item.type === 'pickup') {
+        return `
+            <div class="delivery-header">
+                <h3>🏪 ${item.customer_name || 'Parada na Confeitaria'}</h3>
+                <span class="priority priority-0" style="background-color: #28a745; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">
+                    🏪 Parada
+                </span>
             </div>
-            <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️ Editar</button>
-            <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
-            <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗 Link</button>
-    `;
-    if (item.status === 'in_transit') {
-        content += `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
+            <p><strong>📍 Endereço:</strong> ${item.address || confeitariaLocation.address}</p>
+            <p><strong>📦 Ação:</strong> ${item.product_description || 'Recarregar produtos / Pausa'}</p>
+            <div class="delivery-actions">
+                <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
+                    <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
+                    <input type="number" id="order-input-${item.id}"
+                           class="order-input" 
+                           value="${manualOrder[item.id] || ''}" 
+                           min="1"
+                           onchange="updateManualOrder('${item.id}', this.value)"
+                           style="width:50px; padding:3px; text-align:center;">
+                </div>
+                <button onclick="showDeliveryOnMap(${parseFloat(item.lat || confeitariaLocation.lat)}, ${parseFloat(item.lng || confeitariaLocation.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
+                <button onclick="deleteDelivery('${item.id}', 'pickup', 'pickup')" class="btn btn-danger btn-sm">🗑️ Remover</button>
+            </div>
+            <span class="status" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em; background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9;">
+                ${getStatusLabel('pickup', 'pickup')}
+            </span>
+        `;
+    } else {
+        // Código para entregas normais permanece igual
+        const orderNumberDisplay = item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
+        const productDisplay = item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
+        const priorityEmoji = getPriorityEmoji(item.priority);
+
+        let content = `
+            <div class="delivery-header">
+                <h3>${item.customer_name} ${productDisplay}</h3>
+                <span class="priority priority-${getPriorityClass(item.priority)}" style="background-color: ${getPriorityColor(item.priority)}; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">
+                    ${priorityEmoji} ${getPriorityLabel(item.priority)}
+                </span>
+            </div>
+            ${orderNumberDisplay}
+            <p><strong>📍 Endereço:</strong> ${item.address}</p>
+            <p><strong>📦 Produto:</strong> ${item.product_description}</p>
+            ${item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
+            <div class="delivery-actions">
+                <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
+                    <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
+                    <input type="number" id="order-input-${item.id}"
+                           class="order-input" 
+                           value="${manualOrder[item.id] || ''}" 
+                           min="1"
+                           onchange="updateManualOrder('${item.id}', this.value)"
+                           style="width:50px; padding:3px; text-align:center;">
+                </div>
+                <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️ Editar</button>
+                <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
+                <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗 Link</button>
+        `;
+        
+        if (item.status === 'in_transit') {
+            content += `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
+        }
+        
+        content += `<button onclick="deleteDelivery('${item.id}', '${item.status}', 'delivery')" class="btn btn-danger btn-sm">🗑️ Excluir</button>
+            </div>
+            <span class="status status-${item.status}" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em;">${getStatusLabel(item.status, 'delivery')}</span>
+        `;
+        return content;
     }
-    content += `<button onclick="deleteDelivery('${item.id}', '${item.status}')" class="btn btn-danger btn-sm">🗑️ Excluir</button>
-        </div>
-        <span class="status status-${item.status}" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em;">${getStatusLabel(item.status)}</span>
-    `;
-    return content;
 }
 
 async function checkExistingRoute(date) {
@@ -755,8 +786,36 @@ function showDeliveryOnMap(lat, lng) {
     }
 }
 
-async function deleteDelivery(deliveryId, status) {
+async function deleteDelivery(deliveryId, status, itemType = 'delivery') {
+    // Se for uma parada na confeitaria, remove localmente
+    if (itemType === 'pickup' || deliveryId.toString().startsWith('pickup_')) {
+        if (!confirm('Tem certeza que deseja remover esta parada na confeitaria?')) return;
+        
+        try {
+            // Remove da lista local de pickupStops
+            pickupStops = pickupStops.filter(stop => stop.id !== deliveryId);
+            
+            // Remove da ordem manual
+            delete manualOrder[deliveryId];
+            
+            // Re-renderiza a lista
+            renderDeliveriesList();
+            
+            // Atualiza os marcadores do mapa
+            updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
+            
+            showToast('Parada na confeitaria removida com sucesso!', 'success');
+            return;
+        } catch (error) {
+            console.error('Erro ao remover parada:', error);
+            showToast('Erro ao remover parada: ' + error.message, 'error');
+            return;
+        }
+    }
+    
+    // Para entregas normais, continua com o processo normal
     if (!confirm('Tem certeza que deseja excluir esta entrega? Esta ação não pode ser desfeita.')) return;
+    
     try {
         const response = await fetch(`${API_URL}/deliveries/${deliveryId}`, { method: 'DELETE' });
         if (response.ok) {
@@ -1098,26 +1157,66 @@ async function saveSettings() {
 // --- Paradas de Pickup ---
 function addPickupStop() {
     const newPickupId = `pickup_${Date.now()}`;
-    pickupStops.push({
+    const newPickupStop = {
         id: newPickupId,
         type: 'pickup',
         lat: confeitariaLocation.lat,
         lng: confeitariaLocation.lng,
         address: confeitariaLocation.address,
-        order: 999
-    });
-    manualOrder[newPickupId] = (Object.keys(manualOrder).length > 0 ? Math.max(0, ...Object.values(manualOrder).filter(v => typeof v === 'number')) : 0) + 1;
+        customer_name: 'Confeitaria Demiplié',
+        product_description: 'Parada na confeitaria - recarregar produtos',
+        priority: 0,
+        status: 'pickup' // Define um status específico para paradas
+    };
+    
+    pickupStops.push(newPickupStop);
+    
+    // Define ordem manual como próxima disponível
+    const maxOrder = Math.max(0, ...Object.values(manualOrder).filter(v => typeof v === 'number'));
+    manualOrder[newPickupId] = maxOrder + 1;
+    
+    console.log('Nova parada adicionada:', newPickupStop);
+    console.log('Ordem manual atualizada:', manualOrder);
+    
+    // Re-renderiza e atualiza mapa
     renderDeliveriesList();
     updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
-    showToast("Parada na confeitaria adicionada.", "info");
+    
+    showToast("Parada na confeitaria adicionada com sucesso!", "success");
 }
 
 function removePickupStop(stopId) {
-    pickupStops = pickupStops.filter(stop => stop.id !== stopId);
-    delete manualOrder[stopId];
-    renderDeliveriesList();
-    updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
-    showToast("Parada na confeitaria removida.", "info");
+    if (!confirm('Tem certeza que deseja remover esta parada na confeitaria?')) {
+        return;
+    }
+    
+    try {
+        // Remove da lista de pickupStops
+        const initialLength = pickupStops.length;
+        pickupStops = pickupStops.filter(stop => stop.id !== stopId);
+        
+        if (pickupStops.length === initialLength) {
+            console.warn('Parada não encontrada para remoção:', stopId);
+            showToast('Parada não encontrada', 'error');
+            return;
+        }
+        
+        // Remove da ordem manual
+        delete manualOrder[stopId];
+        
+        console.log('Parada removida:', stopId);
+        console.log('Paradas restantes:', pickupStops.length);
+        
+        // Re-renderiza e atualiza mapa
+        renderDeliveriesList();
+        updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
+        
+        showToast("Parada na confeitaria removida com sucesso!", "success");
+        
+    } catch (error) {
+        console.error('Erro ao remover parada:', error);
+        showToast('Erro ao remover parada: ' + error.message, 'error');
+    }
 }
 
 function updateManualOrder(itemId, orderValue) {
@@ -1261,13 +1360,8 @@ window.cancelEdit = window.cancelEdit || function() {
     const form = document.getElementById('edit-delivery-form');
     if (form) form.reset();
 };
+window.deleteDelivery = deleteDelivery;
+window.getStatusLabel = getStatusLabel;
+window.renderDeliveryItemContent = renderDeliveryItemContent;
 window.addPickupStop = addPickupStop;
 window.removePickupStop = removePickupStop;
-window.updateManualOrder = updateManualOrder;
-window.clearAllDeliveries = clearAllDeliveries;
-window.shareRoute = shareRoute;
-window.openSettings = openSettings;
-window.showDeliveryOnMap = showDeliveryOnMap;
-window.deleteDelivery = deleteDelivery;
-window.generateTrackingLink = generateTrackingLink;
-window.completeDelivery = completeDelivery;
