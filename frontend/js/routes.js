@@ -128,20 +128,14 @@ function updateProductInfo() {
 function updateEditProductInfo() {
     const productSelect = document.getElementById('edit-product-select');
     const prioritySelect = document.getElementById('edit-priority-select');
-    const productDescription = document.getElementById('edit-product-description'); // Adicionado para auto-preenchimento
 
     if (productSelect && productSelect.value && PRODUCT_CONFIG[productSelect.value]) {
         const config = PRODUCT_CONFIG[productSelect.value];
         if (prioritySelect) {
             prioritySelect.value = config.priority;
         }
-        // Se a descrição estiver vazia no formulário de edição, preenche com a do produto
-        if (productDescription && (!productDescription.value || productDescription.value.trim() === '')) {
-            productDescription.value = config.description || config.name;
-        }
     }
 }
-
 
 function getProductDisplayName(productType) {
     return PRODUCT_CONFIG[productType]?.name || productType || 'Produto não especificado';
@@ -168,43 +162,81 @@ function getStatusLabel(status) {
 function initializeAddressAutocomplete() {
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
         console.warn('Google Maps Places library não está pronta para o Autocomplete. Tentando em 1s.');
-        setTimeout(initializeAddressAutocomplete, 1000);
+        setTimeout(initializeAddressAutocomplete, 1000); // Tenta novamente em 1 segundo
         return;
     }
     console.log("Tentando inicializar Autocomplete do Google Places...");
 
+    // Autocomplete para o formulário de NOVA ENTREGA
     const addressInput = document.getElementById('address-input');
     if (addressInput) {
         try {
-            const autocompleteNew = new google.maps.places.Autocomplete(addressInput, { types: ['address'], componentRestrictions: { country: 'br' } });
+            const autocompleteNew = new google.maps.places.Autocomplete(
+                addressInput,
+                {
+                    types: ['address'],
+                    componentRestrictions: { country: 'br' } // Restringe ao Brasil
+                }
+            );
             autocompleteNew.addListener('place_changed', function() {
                 const place = autocompleteNew.getPlace();
-                if (place && place.formatted_address) addressInput.value = place.formatted_address;
-                else console.warn('Autocomplete (nova entrega): local não encontrado ou sem endereço formatado.');
+                if (place && place.formatted_address) {
+                    addressInput.value = place.formatted_address;
+                } else if (place && place.name && !place.formatted_address) {
+                    // Se for um POI sem endereço formatado, usa o nome.
+                    // Mas idealmente o usuário deve buscar um endereço completo.
+                    console.warn('Autocomplete para nova entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
+                     // addressInput.value = place.name; // Descomente se quiser usar o nome do POI
+                } else {
+                    console.warn('Autocomplete para nova entrega: local não encontrado ou sem endereço formatado.');
+                }
             });
             console.log("Autocomplete para 'address-input' inicializado.");
-        } catch(e) { console.error("Erro ao inicializar autocomplete para 'address-input':", e); }
-    } else { console.warn("'address-input' não encontrado."); }
+        } catch(e) {
+            console.error("Erro ao inicializar autocomplete para 'address-input':", e);
+        }
+    } else {
+        console.warn("'address-input' não encontrado para o Autocomplete.");
+    }
 
+    // Autocomplete para o formulário de EDIÇÃO DE ENTREGA
     const editAddressInput = document.getElementById('edit-address');
     if (editAddressInput) {
          try {
-            const autocompleteEdit = new google.maps.places.Autocomplete(editAddressInput, { types: ['address'], componentRestrictions: { country: 'br' } });
+            const autocompleteEdit = new google.maps.places.Autocomplete(
+                editAddressInput,
+                {
+                    types: ['address'],
+                    componentRestrictions: { country: 'br' }
+                }
+            );
             autocompleteEdit.addListener('place_changed', function() {
                 const place = autocompleteEdit.getPlace();
-                if (place && place.formatted_address) editAddressInput.value = place.formatted_address;
-                else console.warn('Autocomplete (edição): local não encontrado ou sem endereço formatado.');
+                if (place && place.formatted_address) {
+                    editAddressInput.value = place.formatted_address;
+                } else if (place && place.name && !place.formatted_address) {
+                    console.warn('Autocomplete para edição de entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
+                    // editAddressInput.value = place.name;
+                } else {
+                     console.warn('Autocomplete para edição de entrega: local não encontrado ou sem endereço formatado.');
+                }
             });
             console.log("Autocomplete para 'edit-address' inicializado.");
-        } catch(e) { console.error("Erro ao inicializar autocomplete para 'edit-address':", e); }
+        } catch(e) {
+            console.error("Erro ao inicializar autocomplete para 'edit-address':", e);
+        }
+    } else {
+        // Este elemento pode não existir até que o formulário de edição seja aberto.
+        // Pode ser necessário inicializá-lo quando o formulário de edição se torna visível.
+        // console.warn("'edit-address' não encontrado para o Autocomplete no carregamento inicial.");
     }
 }
 
 
 function initMap() {
     if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
-        console.error("Google Maps API não carregada.");
-        showToast("Erro ao carregar API do Mapa.", "error");
+        console.error("Google Maps API não carregada. Não é possível inicializar o mapa.");
+        showToast("Erro ao carregar API do Mapa. Verifique a conexão ou a chave da API.", "error");
         if (!document.getElementById('google-maps-api-script-retry')) {
              const apiKeyEl = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
              if (apiKeyEl){
@@ -212,21 +244,44 @@ function initMap() {
                  const script = document.createElement('script');
                  script.id = 'google-maps-api-script-retry';
                  script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=onGoogleMapsApiLoaded`;
-                 script.async = true; script.defer = true;
+                 script.async = true;
+                 script.defer = true;
                  document.head.appendChild(script);
-             } else { console.error("Chave da API do Google Maps não encontrada no HTML."); }
+             } else {
+                console.error("Não foi possível encontrar a chave da API do Google Maps no HTML.");
+             }
         }
         return;
     }
 
     const initialCenter = { lat: parseFloat(confeitariaLocation.lat), lng: parseFloat(confeitariaLocation.lng) };
+
     try {
-        map = new google.maps.Map(document.getElementById('map'), { center: initialCenter, zoom: 13, styles: [{ featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }] });
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: initialCenter,
+            zoom: 13,
+            styles: [{ featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }]
+        });
+
         directionsService = new google.maps.DirectionsService();
-        directionsRenderer = new google.maps.DirectionsRenderer({ polylineOptions: { strokeColor: '#E5B5B3', strokeWeight: 4 }, markerOptions: { visible: false } });
+        directionsRenderer = new google.maps.DirectionsRenderer({
+            polylineOptions: { strokeColor: '#E5B5B3', strokeWeight: 4 },
+            markerOptions: { visible: false }
+        });
         directionsRenderer.setMap(map);
-        new google.maps.Marker({ position: initialCenter, map: map, title: 'Demiplié', icon: { url: 'assets/icon-sq.png', scaledSize: new google.maps.Size(35, 35), anchor: new google.maps.Point(17, 35) }, zIndex: 1000 });
-        console.log("Mapa inicializado:", initialCenter);
+
+        new google.maps.Marker({
+            position: initialCenter,
+            map: map,
+            title: 'Demiplié',
+            icon: {
+                url: 'assets/icon-sq.png',
+                scaledSize: new google.maps.Size(35, 35),
+                anchor: new google.maps.Point(17, 35)
+            },
+            zIndex: 1000
+        });
+        console.log("Mapa inicializado com centro em:", initialCenter);
     } catch (error) {
         console.error('Erro ao inicializar mapa:', error);
         showToast("Erro ao inicializar o mapa.", "error");
@@ -239,8 +294,11 @@ window.onGoogleMapsApiLoaded = async function() {
     console.log("Google Maps API carregada via callback (routes.js).");
     initMap(); 
     await loadPageData(); 
+    // initializeAddressAutocomplete() será chamado dentro de loadPageData após outras inicializações,
+    // ou diretamente aqui se for mais robusto garantir a ordem.
     initializeAddressAutocomplete();
 };
+
 
 function clearMarkers() {
     markers.forEach(marker => marker.setMap(null));
@@ -250,19 +308,48 @@ function clearMarkers() {
 function updateMapMarkers(itemsToMark) {
     clearMarkers();
     if (!itemsToMark || typeof google === 'undefined' || !google.maps) return;
+
     itemsToMark.forEach((item, idx) => {
         if (!item || typeof item.lat === 'undefined' || typeof item.lng === 'undefined') {
-            console.warn("Item inválido ou sem coordenadas para marcar:", item); return;
+            console.warn("Item inválido ou sem coordenadas para marcar:", item);
+            return;
         }
+
         const markerLabel = typeof item.indexInRoute !== 'undefined' ? (item.indexInRoute + 1).toString() : (idx + 1).toString();
+        const markerIconConfig = {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(item.priority || 0),
+            fillOpacity: 0.9,
+            strokeColor: 'white',
+            strokeWeight: 2
+        };
+
         const marker = new google.maps.Marker({
-            position: { lat: parseFloat(item.lat), lng: parseFloat(item.lng) }, map: map,
+            position: { lat: parseFloat(item.lat), lng: parseFloat(item.lng) },
+            map: map,
             title: item.type === 'pickup' ? (item.customer_name || 'Confeitaria') : (item.customer_name || 'Entrega'),
-            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(item.priority || 0), fillOpacity: 0.9, strokeColor: 'white', strokeWeight: 2 },
-            label: { text: markerLabel, color: 'white', fontSize: '12px', fontWeight: 'bold' },
+            icon: markerIconConfig,
+            label: {
+                text: markerLabel,
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: 'bold'
+            },
             zIndex: 100 + (typeof item.indexInRoute !== 'undefined' ? item.indexInRoute : idx)
         });
-        const infoContent = `<div style="padding:10px;font-family:Arial,sans-serif;font-size:14px;max-width:250px;"><h4 style="margin:0 0 5px 0;color:#333;">${marker.getTitle()}</h4>${item.order_number ? `<p style="margin:3px 0;"><strong>Pedido:</strong> #${item.order_number}</p>`:''} ${item.product_name && item.type !== 'pickup' ? `<p style="margin:3px 0;"><strong>Produto:</strong> ${item.product_name}</p>`:''} <p style="margin:3px 0;"><strong>Endereço:</strong> ${item.address||'N/A'}</p> ${item.type !== 'pickup' ? `<p style="margin:3px 0;"><strong>Prioridade:</strong> ${getPriorityLabel(item.priority||0)}</p>`:''} ${item.product_description && item.type !== 'pickup' ? `<p style="margin:3px 0;"><strong>Detalhes:</strong> ${item.product_description}</p>`:''}</div>`;
+
+        const infoContent = `
+            <div style="padding: 10px; font-family: Arial, sans-serif; font-size: 14px; max-width: 250px;">
+                <h4 style="margin: 0 0 5px 0; color: #333;">${marker.getTitle()}</h4>
+                ${item.order_number ? `<p style="margin: 3px 0;"><strong>Pedido:</strong> #${item.order_number}</p>` : ''}
+                ${item.product_name && item.type !== 'pickup' ? `<p style="margin: 3px 0;"><strong>Produto:</strong> ${item.product_name}</p>` : ''}
+                <p style="margin: 3px 0;"><strong>Endereço:</strong> ${item.address || 'N/A'}</p>
+                ${item.type !== 'pickup' ? `<p style="margin: 3px 0;"><strong>Prioridade:</strong> ${getPriorityLabel(item.priority || 0)}</p>` : ''}
+                ${item.product_description && item.type !== 'pickup' ? `<p style="margin: 3px 0;"><strong>Detalhes:</strong> ${item.product_description}</p>` : ''}
+            </div>
+        `;
+        
         const infoWindow = new google.maps.InfoWindow({ content: infoContent });
         marker.addListener('click', () => { infoWindow.open(map, marker); });
         markers.push(marker);
@@ -271,177 +358,316 @@ function updateMapMarkers(itemsToMark) {
 
 function showOptimizedRoute(route) {
     if (typeof google === 'undefined' || !google.maps || !map || !directionsService || !directionsRenderer) {
-        console.error("Mapa ou serviços não prontos para rota otimizada."); showToast("Mapa não pronto.", "error"); return;
+        console.error("Mapa ou serviços de direção não estão prontos para mostrar rota otimizada.");
+        showToast("Mapa não está pronto para exibir a rota.", "error");
+        return;
     }
+
     clearMarkers();
-    const orderedWaypoints = []; const allStopsForDisplay = [];
+
+    const orderedWaypoints = [];
+    const allStopsForDisplay = [];
+
     if (!route || !route.optimizedOrder || route.optimizedOrder.length === 0) {
-        console.warn("showOptimizedRoute: optimizedOrder inválido.");
+        console.warn("showOptimizedRoute chamada sem optimizedOrder válido ou com optimizedOrder vazio.");
         if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
-        updateMapMarkers(deliveryData || []); return;
+        updateMapMarkers(deliveryData || []);
+        return;
     }
+    
     route.optimizedOrder.forEach((item, index) => {
         let stopDetails;
         if (item.type === 'pickup') {
-            stopDetails = { id: item.id || item.deliveryId || item.shipmentId, lat: parseFloat(item.lat) || confeitariaLocation.lat, lng: parseFloat(item.lng) || confeitariaLocation.lng, address: item.address || confeitariaLocation.address, type: 'pickup', customer_name: 'Confeitaria Demiplié', product_description: 'Parada na confeitaria', priority: item.priority || 0, order: item.order };
+            stopDetails = {
+                id: item.id || item.deliveryId || item.shipmentId,
+                lat: parseFloat(item.lat) || confeitariaLocation.lat,
+                lng: parseFloat(item.lng) || confeitariaLocation.lng,
+                address: item.address || confeitariaLocation.address,
+                type: 'pickup',
+                customer_name: 'Confeitaria Demiplié',
+                product_description: 'Parada na confeitaria',
+                priority: item.priority || 0,
+                order: item.order
+            };
         } else {
-            const fullDetails = (deliveryData || []).find(d => d.id === item.deliveryId);
-            stopDetails = { ...item, customer_name: fullDetails?.customer_name || item.customer_name || 'Cliente', product_description: fullDetails?.product_description || item.product_description || 'Produto' };
+            const fullDeliveryDetails = (deliveryData || []).find(d => d.id === item.deliveryId);
+            stopDetails = {
+                ...item,
+                customer_name: fullDeliveryDetails?.customer_name || item.customer_name || 'Cliente Desconhecido',
+                product_description: fullDeliveryDetails?.product_description || item.product_description || 'Produto não especificado',
+            };
         }
-        if (stopDetails.address) orderedWaypoints.push({ location: stopDetails.address, stopover: true });
-        else console.warn("Parada sem endereço:", stopDetails);
+        
+        if (stopDetails.address) {
+            orderedWaypoints.push({
+                location: stopDetails.address,
+                stopover: true
+            });
+        } else {
+            console.warn("Parada sem endereço não será adicionada aos waypoints:", stopDetails);
+        }
         allStopsForDisplay.push({ ...stopDetails, indexInRoute: index });
     });
+
     if (orderedWaypoints.length === 0) {
-        console.warn('Nenhuma parada válida para desenhar rota.');
+        console.warn('Nenhuma parada válida com endereço para desenhar a rota otimizada.');
         if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
-        updateMapMarkers(allStopsForDisplay.length ? allStopsForDisplay : (deliveryData || [])); return;
+        updateMapMarkers(allStopsForDisplay.length > 0 ? allStopsForDisplay : (deliveryData || []));
+        return;
     }
+
     updateMapMarkers(allStopsForDisplay);
+
     const origin = settings.origin_address;
-    let waypointsAPI = []; let destinationAPI;
-    if (orderedWaypoints.length === 1) destinationAPI = orderedWaypoints[0].location;
-    else { waypointsAPI = orderedWaypoints.slice(0, -1).map(wp => ({ location: wp.location, stopover: true })); destinationAPI = orderedWaypoints[orderedWaypoints.length - 1].location; }
-    if (settings.circular_route === 'true') {
-        if (orderedWaypoints.length > 0) waypointsAPI = orderedWaypoints.map(wp => ({ location: wp.location, stopover: true }));
-        destinationAPI = origin;
+    let waypointsForAPIRequest = [];
+    let destinationForAPIRequest;
+
+    if (orderedWaypoints.length === 1) {
+        destinationForAPIRequest = orderedWaypoints[0].location;
+    } else {
+        waypointsForAPIRequest = orderedWaypoints.slice(0, -1).map(wp => ({ location: wp.location, stopover: true }));
+        destinationForAPIRequest = orderedWaypoints[orderedWaypoints.length - 1].location;
     }
-    const request = { origin, destination: destinationAPI, waypoints: waypointsAPI, optimizeWaypoints: false, travelMode: google.maps.TravelMode.DRIVING, language: 'pt-BR' };
-    console.log("DirectionsService Request:", JSON.stringify(request, null, 2));
+
+    if (settings.circular_route === 'true') {
+        if (orderedWaypoints.length > 0) {
+            waypointsForAPIRequest = orderedWaypoints.map(wp => ({ location: wp.location, stopover: true }));
+        }
+        destinationForAPIRequest = origin;
+    }
+    
+    const request = {
+        origin: origin,
+        destination: destinationForAPIRequest,
+        waypoints: waypointsForAPIRequest,
+        optimizeWaypoints: false,
+        travelMode: google.maps.TravelMode.DRIVING,
+        language: 'pt-BR'
+    };
+    
+    console.log("Enviando requisição para DirectionsService:", JSON.stringify(request, null, 2));
+
     directionsService.route(request, (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
             directionsRenderer.setDirections(result);
-            if (result.routes?.[0]?.bounds) map.fitBounds(result.routes[0].bounds);
-        } else console.error('DirectionsService Error:', status, result); showToast(`Erro ao exibir rota: ${status}`, 'error');
+            if (result.routes && result.routes[0] && result.routes[0].bounds) {
+                map.fitBounds(result.routes[0].bounds);
+            }
+        } else {
+            console.error('Erro ao traçar rota otimizada no DirectionsService:', status, result);
+            showToast(`Erro ao exibir rota otimizada no mapa: ${status}`, 'error');
+        }
     });
     updateRouteStats();
 }
 
 // --- Carregamento de Dados ---
+
 async function loadDeliveries() {
     try {
         const routeDate = getRouteDate();
-        console.log(`Carregando entregas: ${routeDate}...`);
-        const response = await fetch(`${API_URL}/deliveries?date=${routeDate}`);
-        if (!response.ok) throw new Error(`Erro ${response.status}`);
-        deliveryData = await response.json();
-        console.log(`Recebidas ${deliveryData.length} entregas`);
+        console.log(`Carregando entregas para a data ${routeDate}...`);
+        
+        const url = `${API_URL}/deliveries?date=${routeDate}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Erro ${response.status} ao carregar entregas`);
+        }
+        
+        const deliveries = await response.json();
+        deliveryData = deliveries;
+        console.log(`Dados de entregas recebidos: ${deliveryData.length} entregas`);
+
         await checkExistingRoute(routeDate);
+
         renderDeliveriesList();
         updateRouteStats();
-        if (!currentRoute || !currentRoute.optimizedOrder?.length) updateMapMarkers(deliveryData);
+
+        if (!currentRoute || !currentRoute.optimizedOrder || currentRoute.optimizedOrder.length === 0) {
+            updateMapMarkers(deliveryData);
+        }
+        
     } catch (error) {
         console.error('Erro ao carregar entregas:', error);
         showToast('Erro ao carregar entregas: ' + error.message, 'error');
-        const listEl = document.getElementById('deliveries-list');
-        if (listEl) listEl.innerHTML = `<div class="error-message" style="padding:20px;text-align:center;background-color:#ffebee;border-radius:8px;margin-bottom:20px;"><h4 style="color:#d32f2f;">Erro</h4><p>Não foi possível carregar as entregas.</p><button onclick="loadDeliveries()" class="btn btn-secondary" style="margin-top:10px;">Tentar Novamente</button></div>`;
+        const listElement = document.getElementById('deliveries-list');
+        if (listElement) {
+            listElement.innerHTML = `<div class="error-message" style="padding: 20px; text-align: center; background-color: #ffebee; border-radius: 8px; margin-bottom: 20px;"><h4 style="color: #d32f2f;">Erro ao carregar entregas</h4><p>Não foi possível carregar as entregas do servidor.</p><button onclick="loadDeliveries()" class="btn btn-secondary" style="margin-top: 10px;">Tentar novamente</button></div>`;
+        }
     }
 }
 
 function renderDeliveriesList() {
-    const listEl = document.getElementById('deliveries-list');
-    if (!listEl) return;
-    listEl.innerHTML = '';
-    let allDisplayItems = [...deliveryData.map(d => ({ ...d, type: d.type || 'delivery' }))]; // Garante 'type'
+    const listElement = document.getElementById('deliveries-list');
+    if (!listElement) return;
+    listElement.innerHTML = '';
+
+    let allDisplayItems = [...deliveryData.map(d => ({ ...d, type: 'delivery' }))];
+
     pickupStops.forEach((stop, index) => {
-        allDisplayItems.push({ ...stop, id: stop.id || `pickup_${Date.now()}_${index}`, customer_name: 'Confeitaria Demiplié', product_description: 'Parada na confeitaria', priority: stop.priority || 0, type: 'pickup' });
+        allDisplayItems.push({
+            ...stop,
+            id: stop.id || `pickup_${Date.now()}_${index}`,
+            customer_name: 'Confeitaria Demiplié',
+            product_description: 'Parada na confeitaria',
+            priority: stop.priority || 0,
+            type: 'pickup'
+        });
     });
+
     allDisplayItems.sort((a, b) => {
-        const orderA = manualOrder[String(a.id)] || 999; // Usar String(a.id)
-        const orderB = manualOrder[String(b.id)] || 999; // Usar String(b.id)
+        const orderA = manualOrder[a.id] || 999;
+        const orderB = manualOrder[b.id] || 999;
         if (orderA !== orderB) return orderA - orderB;
         if ((b.priority || 0) !== (a.priority || 0)) return (b.priority || 0) - (a.priority || 0);
-        return (String(a.id) < String(b.id)) ? -1 : 1; // Comparar IDs como strings
+        return (a.id < b.id) ? -1 : 1;
     });
-    if (!allDisplayItems.length) listEl.innerHTML = '<p style="text-align:center;padding:20px;color:#777;">Nenhuma entrega para exibir.</p>';
-    else allDisplayItems.forEach((item, index) => {
-        const itemEl = document.createElement('div');
-        itemEl.className = 'delivery-item draggable'; itemEl.draggable = true;
-        itemEl.dataset.itemId = String(item.id); itemEl.dataset.itemType = item.type;
-        itemEl.innerHTML = renderDeliveryItemContent(item, index); // Usa a função corrigida
-        itemEl.addEventListener('dragstart', handleDragStart); itemEl.addEventListener('dragend', handleDragEnd);
-        itemEl.addEventListener('dragover', handleDragOver); itemEl.addEventListener('drop', handleDrop);
-        itemEl.addEventListener('dragleave', handleDragLeave);
-        listEl.appendChild(itemEl);
-    });
+
+    if (allDisplayItems.length === 0) {
+        listElement.innerHTML = '<p style="text-align:center; padding: 20px; color: #777;">Nenhuma entrega para exibir.</p>';
+    } else {
+        allDisplayItems.forEach((item, index) => {
+            const itemElement = document.createElement('div');
+            itemElement.className = 'delivery-item draggable';
+            itemElement.draggable = true;
+            itemElement.dataset.itemId = item.id;
+            itemElement.dataset.itemType = item.type;
+            
+            itemElement.innerHTML = renderDeliveryItemContent(item, index);
+            
+            itemElement.addEventListener('dragstart', handleDragStart);
+            itemElement.addEventListener('dragend', handleDragEnd);
+            itemElement.addEventListener('dragover', handleDragOver);
+            itemElement.addEventListener('drop', handleDrop);
+            itemElement.addEventListener('dragleave', handleDragLeave);
+            
+            listElement.appendChild(itemElement);
+        });
+    }
 }
 
-// CORREÇÃO para renderDeliveryItemContent para status e exclusão
 function renderDeliveryItemContent(item, index) {
-    // Esta função pode ser a window.renderDeliveryItem do seu HTML ou este fallback.
-    // Assegure que as chamadas onclick para delete usem deleteItemFromList.
-    const orderNumberDisp = item.type !== 'pickup' && item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
-    const prio = item.priority || 0;
-    const productDisp = item.type !== 'pickup' && item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(prio)}">${item.product_name}</span>` : '';
-    const prioEmoji = getPriorityEmoji(prio);
-    const itemTitle = item.type === 'pickup' ? 'Parada na Confeitaria' : (item.customer_name || 'Cliente não informado');
-    const itemProdDesc = item.type === 'pickup' ? 'Recarregar produtos' : (item.product_description || 'Produto não especificado');
-    const itemPrioLabel = item.type === 'pickup' ? 'PARADA' : getPriorityLabel(prio);
+    if (typeof window.renderDeliveryItem === 'function') {
+        return window.renderDeliveryItem(item, index);
+    }
 
-    let html = `
+    const orderNumberDisplay = item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
+    const productDisplay = item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
+    const priorityEmoji = getPriorityEmoji(item.priority);
+
+    let content = `
         <div class="delivery-header">
-            <h3>${itemTitle} ${productDisp}</h3>
-            <span class="priority priority-${getPriorityClass(prio)}" style="background-color:${getPriorityColor(prio)};color:white;padding:3px 7px;border-radius:4px;font-size:0.9em;">
-                ${prioEmoji} ${itemPrioLabel}
+            <h3>${item.customer_name} ${productDisplay}</h3>
+            <span class="priority priority-${getPriorityClass(item.priority)}" style="background-color: ${getPriorityColor(item.priority)}; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">
+                ${priorityEmoji} ${getPriorityLabel(item.priority)}
             </span>
         </div>
-        ${orderNumberDisp}
-        <p><strong>📍 Endereço:</strong> ${item.address || 'N/A'}</p>
-        <p><strong>📦 Produto:</strong> ${itemProdDesc}</p>
-        ${item.type !== 'pickup' && item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
+        ${orderNumberDisplay}
+        <p><strong>📍 Endereço:</strong> ${item.address}</p>
+        <p><strong>📦 Produto:</strong> ${item.product_description}</p>
+        ${item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
         <div class="delivery-actions">
-            <div class="manual-order" style="display:flex;align-items:center;gap:5px;">
+            <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
                 <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
-                <input type="number" id="order-input-${String(item.id)}" class="order-input" 
-                       value="${manualOrder[String(item.id)] || ''}" min="1"
-                       onchange="updateManualOrder('${String(item.id)}', this.value)"
-                       style="width:50px;padding:3px;text-align:center;">
+                <input type="number" id="order-input-${item.id}"
+                       class="order-input" 
+                       value="${manualOrder[item.id] || ''}" 
+                       min="1"
+                       onchange="updateManualOrder('${item.id}', this.value)"
+                       style="width:50px; padding:3px; text-align:center;">
             </div>
-            ${item.type !== 'pickup' ? `<button onclick="editDelivery('${String(item.id)}')" class="btn btn-secondary btn-sm">✏️ Editar</button>` : ''}
+            <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️ Editar</button>
             <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
-            ${item.type !== 'pickup' ? `<button onclick="generateTrackingLink('${String(item.id)}')" class="btn btn-info btn-sm">🔗 Link</button>` : ''}
+            <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗 Link</button>
     `;
-    if (item.type !== 'pickup' && item.status === 'in_transit') {
-        html += `<button onclick="completeDelivery('${String(item.id)}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
+    if (item.status === 'in_transit') {
+        content += `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
     }
-    // Botão de excluir chama deleteItemFromList
-    html += `<button onclick="deleteItemFromList('${String(item.id)}', '${item.type}')" class="btn btn-danger btn-sm">🗑️ Excluir</button>
-        </div>`;
-    
-    // Só mostra status para entregas
-    if (item.type !== 'pickup') {
-        html += `<span class="status status-${item.status || 'pending'}" style="display:inline-block;margin-top:10px;padding:3px 7px;border-radius:4px;font-size:0.9em;">${getStatusLabel(item.status || 'pending')}</span>`;
-    }
-    return html;
+    content += `<button onclick="deleteDelivery('${item.id}', '${item.status}')" class="btn btn-danger btn-sm">🗑️ Excluir</button>
+        </div>
+        <span class="status status-${item.status}" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em;">${getStatusLabel(item.status)}</span>
+    `;
+    return content;
 }
-
 
 async function checkExistingRoute(date) {
     try {
         const response = await fetch(`${API_URL}/deliveries/routes/${date}`);
+
         if (!response.ok) {
-            if (response.status === 404) { currentRoute = null; manualOrder = {}; pickupStops = []; if (directionsRenderer) directionsRenderer.setDirections({ routes: [] }); } 
-            else { console.error(`Erro ${response.status} ao buscar rota: ${date}`); showToast(`Erro ao buscar rota: ${response.status}`, 'error'); }
+            if (response.status === 404) {
+                console.log(`Nenhuma rota otimizada salva encontrada para ${date}.`);
+                currentRoute = null;
+                manualOrder = {};
+                pickupStops = [];
+                if (typeof directionsRenderer !== 'undefined' && directionsRenderer) {
+                    directionsRenderer.setDirections({ routes: [] });
+                }
+            } else {
+                console.error(`Erro ${response.status} ao buscar rota existente para ${date}.`);
+                showToast(`Erro ao buscar dados da rota: ${response.status}`, 'error');
+            }
             return; 
         }
+
         const existingRoute = await response.json();
-        if (existingRoute?.id) {
-            currentRoute = { routeId: existingRoute.id, totalDistance: existingRoute.total_distance, totalDuration: existingRoute.total_duration, optimizedOrder: existingRoute.optimized_order, routeConfig: existingRoute.route_config, status: existingRoute.status };
+
+        if (existingRoute && existingRoute.id) {
+            currentRoute = {
+                routeId: existingRoute.id,
+                totalDistance: existingRoute.total_distance,
+                totalDuration: existingRoute.total_duration,
+                optimizedOrder: existingRoute.optimized_order,
+                routeConfig: existingRoute.route_config,
+                status: existingRoute.status
+            };
+
             if (currentRoute.routeConfig) {
                 manualOrder = currentRoute.routeConfig.manualOrder || {};
                 pickupStops = currentRoute.routeConfig.pickupStops || [];
-                if (currentRoute.routeConfig.circularRoute !== undefined) settings.circular_route = currentRoute.routeConfig.circularRoute.toString();
-                if (currentRoute.routeConfig.originAddress) { settings.origin_address = currentRoute.routeConfig.originAddress; confeitariaLocation.address = settings.origin_address; }
-            } else { manualOrder = {}; pickupStops = []; }
-            if (currentRoute.optimizedOrder?.length) {
+                if (currentRoute.routeConfig.circularRoute !== undefined) {
+                    settings.circular_route = currentRoute.routeConfig.circularRoute.toString();
+                }
+                if (currentRoute.routeConfig.originAddress) {
+                    settings.origin_address = currentRoute.routeConfig.originAddress;
+                    confeitariaLocation.address = settings.origin_address;
+                }
+            } else {
+                 manualOrder = {};
+                 pickupStops = [];
+            }
+
+            if (currentRoute.optimizedOrder && currentRoute.optimizedOrder.length > 0) {
                 showOptimizedRoute(currentRoute);
-                if (document.getElementById('start-route')) document.getElementById('start-route').disabled = currentRoute.status !== 'planned';
-                showToast('Rota otimizada carregada!', 'success');
-            } else { if (directionsRenderer) directionsRenderer.setDirections({ routes: [] }); }
-        } else { currentRoute = null; manualOrder = {}; pickupStops = []; if (directionsRenderer) directionsRenderer.setDirections({ routes: [] }); }
+                if (document.getElementById('start-route')) {
+                    document.getElementById('start-route').disabled = currentRoute.status !== 'planned';
+                }
+                showToast('Rota otimizada carregada do servidor!', 'success');
+            } else {
+                console.log(`Rota para ${date} encontrada, mas sem otimização.`);
+                if (typeof directionsRenderer !== 'undefined' && directionsRenderer) {
+                    directionsRenderer.setDirections({ routes: [] });
+                }
+            }
+        } else {
+             console.log(`Nenhuma rota encontrada no banco para ${date}.`);
+             currentRoute = null;
+             manualOrder = {};
+             pickupStops = [];
+             if (typeof directionsRenderer !== 'undefined' && directionsRenderer) {
+                directionsRenderer.setDirections({ routes: [] });
+             }
+        }
     } catch (error) {
-        console.error('Erro crítico ao carregar rota:', error); showToast('Falha ao carregar dados da rota.', 'error');
-        currentRoute = null; manualOrder = {}; pickupStops = []; if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
+        console.error('Erro crítico ao verificar/carregar rota existente:', error);
+        showToast('Falha ao carregar dados da rota.', 'error');
+        currentRoute = null;
+        manualOrder = {};
+        pickupStops = [];
+        if (typeof directionsRenderer !== 'undefined' && directionsRenderer) {
+            directionsRenderer.setDirections({ routes: [] });
+        }
     }
 }
 
@@ -451,21 +677,26 @@ function updateRouteStats() {
     const totalTimeEl = document.getElementById('total-time');
     const totalPriceEl = document.getElementById('total-price');
     const shareRouteBtn = document.getElementById('share-route');
+
     const actualDeliveryItems = deliveryData.filter(d => d.type !== 'pickup');
     if (totalDeliveriesEl) totalDeliveriesEl.textContent = actualDeliveryItems.length;
-    if (currentRoute && currentRoute.optimizedOrder?.length) {
-        const distanceKm = (currentRoute.totalDistance / 1000); // Usar precisão total para cálculo
-        const displayDistanceKm = distanceKm.toFixed(1); // Arredondar só para display
-        if (totalDistanceEl) totalDistanceEl.textContent = `${displayDistanceKm} km`;
+
+    if (currentRoute && currentRoute.optimizedOrder && currentRoute.optimizedOrder.length > 0) {
+        const distanceKm = (currentRoute.totalDistance / 1000).toFixed(1);
         const totalMinutes = Math.round(currentRoute.totalDuration / 60);
+        
         const stopTimePerDelivery = parseInt(settings.stop_time) || 8;
         const actualDeliveriesInOptimizedRoute = currentRoute.optimizedOrder.filter(item => item.type !== 'pickup').length;
         const totalTimeWithStops = totalMinutes + (actualDeliveriesInOptimizedRoute * stopTimePerDelivery);
+        
+        if (totalDistanceEl) totalDistanceEl.textContent = `${distanceKm} km`;
         if (totalTimeEl) totalTimeEl.textContent = `${totalTimeWithStops} min`;
+        
         const dailyRate = parseFloat(settings.daily_rate || 100);
         const kmRate = parseFloat(settings.km_rate || 2.50);
-        const totalPrice = dailyRate + (distanceKm * kmRate); // Usa distanceKm com precisão
+        const totalPrice = dailyRate + (parseFloat(distanceKm) * kmRate);
         if (totalPriceEl) totalPriceEl.textContent = `R$ ${totalPrice.toFixed(2)}`;
+        
         if (shareRouteBtn) shareRouteBtn.disabled = false;
     } else {
         if (totalDistanceEl) totalDistanceEl.textContent = '0 km';
@@ -473,10 +704,11 @@ function updateRouteStats() {
         if (totalPriceEl) totalPriceEl.textContent = 'R$ 0,00';
         if (shareRouteBtn) shareRouteBtn.disabled = true;
     }
-    if (typeof window.ensurePriorityFeatures === "function") window.ensurePriorityFeatures();
+    if (typeof window.ensurePriorityFeatures === 'function') window.ensurePriorityFeatures();
 }
 
 // --- Ações de Entrega ---
+
 document.addEventListener('DOMContentLoaded', function() {
     const deliveryForm = document.getElementById('delivery-form');
     if (deliveryForm) {
@@ -485,67 +717,45 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData(e.target);
             const delivery = Object.fromEntries(formData.entries());
             delivery.order_date = getRouteDate();
+            
             const productSelect = document.getElementById('product-select');
-            if (productSelect?.value && PRODUCT_CONFIG[productSelect.value]) {
+            if (productSelect && productSelect.value && PRODUCT_CONFIG[productSelect.value]) {
                 delivery.product_type = productSelect.value;
                 delivery.product_name = getProductDisplayName(productSelect.value);
             }
+
             try {
-                const response = await fetch(`${API_URL}/deliveries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(delivery) });
+                const response = await fetch(`${API_URL}/deliveries`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(delivery)
+                });
                 const result = await response.json();
-                if (response.ok) { showToast('Entrega adicionada!', 'success'); e.target.reset(); await loadDeliveries(); } 
-                else throw new Error(result.error || 'Erro ao adicionar');
-            } catch (error) { console.error('Erro add entrega:', error); showToast('Erro: ' + error.message, 'error'); }
-        });
-    }
-    const optimizeRouteBtn = document.getElementById('optimize-route');
-    if (optimizeRouteBtn) {
-        optimizeRouteBtn.addEventListener('click', async () => {
-            optimizeRouteBtn.disabled = true; optimizeRouteBtn.innerHTML = '<span class="loading"></span> Otimizando...';
-            try {
-                const requestData = { date: getRouteDate(), manualOrder, pickupStops: pickupStops.map(s => ({ ...s, order: manualOrder[s.id]||999 })) };
-                const response = await fetch(`${API_URL}/deliveries/optimize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestData) });
-                const result = await response.json();
-                if (response.ok && result.routeId) {
-                    currentRoute = result;
-                    if (result.optimizedOrder?.length) {
-                        const newOptimizedManualOrder = {};
-                        result.optimizedOrder.forEach((item, index) => {
-                            const itemId = item.deliveryId || item.id || item.shipmentId;
-                            if (itemId) newOptimizedManualOrder[String(itemId)] = index + 1;
-                        });
-                        manualOrder = newOptimizedManualOrder;
-                    }
-                    if (result.routeConfig) pickupStops = result.routeConfig.pickupStops || pickupStops;
-                    showToast(`Rota otimizada! ${result.totalStops || result.optimizedOrder?.length || 0} paradas.`, 'success');
-                    showOptimizedRoute(currentRoute);
-                    if (document.getElementById('start-route')) document.getElementById('start-route').disabled = false;
-                    updateRouteStats();
-                    renderDeliveriesList();
-                } else throw new Error(result.error || result.message || "Erro na otimização");
-            } catch (error) { console.error('Erro otimizar rota:', error); showToast('Erro: ' + error.message, 'error'); } 
-            finally { optimizeRouteBtn.disabled = false; optimizeRouteBtn.innerHTML = '🗺️ OTIMIZAR ROTA'; }
+                if (response.ok) {
+                    showToast('Entrega adicionada com sucesso!', 'success');
+                    e.target.reset();
+                    await loadDeliveries();
+                } else {
+                    throw new Error(result.error || 'Erro ao adicionar entrega');
+                }
+            } catch (error) {
+                console.error('Erro ao adicionar entrega:', error);
+                showToast('Erro ao adicionar entrega: ' + error.message, 'error');
+            }
         });
     }
 });
 
-// --- Funções Globais (deleteDelivery, etc.) ---
-// ADICIONAR deleteItemFromList e ajustar onclicks
-function deleteItemFromList(itemId, itemType) {
-    console.log(`Tentando excluir: ID=${itemId}, Tipo=${itemType}`);
-    if (itemType === 'pickup') {
-        if (typeof removePickupStop === 'function') removePickupStop(itemId);
-        else { console.error("removePickupStop não definida."); showToast("Erro.", "error"); }
+function showDeliveryOnMap(lat, lng) {
+    if (map && typeof google !== 'undefined' && google.maps) {
+        map.setCenter({ lat: parseFloat(lat), lng: parseFloat(lng) });
+        map.setZoom(17);
     } else {
-        if (typeof deleteDelivery === 'function') {
-            const delivery = deliveryData.find(d => String(d.id) === String(itemId));
-            deleteDelivery(itemId, delivery ? delivery.status : 'pending');
-        } else { console.error("deleteDelivery não definida."); showToast("Erro.", "error"); }
+        showToast("Mapa não está pronto.", "error");
     }
 }
-window.deleteItemFromList = deleteItemFromList; // Expor globalmente
 
-// async function deleteDelivery(deliveryId, status) {
+async function deleteDelivery(deliveryId, status) {
     if (!confirm('Tem certeza que deseja excluir esta entrega? Esta ação não pode ser desfeita.')) return;
     try {
         const response = await fetch(`${API_URL}/deliveries/${deliveryId}`, { method: 'DELETE' });
@@ -560,7 +770,7 @@ window.deleteItemFromList = deleteItemFromList; // Expor globalmente
         console.error('Erro ao excluir entrega:', error);
         showToast('Erro ao excluir entrega: ' + error.message, 'error');
     }
-
+}
 
 function generateTrackingLink(deliveryId) {
     const trackingUrl = `${window.location.origin}/tracking.html?id=${deliveryId}`;
