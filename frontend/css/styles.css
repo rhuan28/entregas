@@ -1793,3 +1793,23 @@ textarea:focus-visible {
     color: inherit; /* Herda a cor do elemento pai (.route-stats) */
     font-weight: 500; /* Ou bold, conforme preferência */
 }
+
+/* ============================== */
+/* 🔹 TEMPO ESTIMADO DE CHEGADA (ETA) */
+/* ============================== */
+.delivery-eta {
+    margin-top: 8px;
+    font-weight: 600;
+    color: var(--info-color);
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    padding: 6px 10px;
+    border-radius: var(--border-radius);
+    font-size: 12px;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.delivery-eta strong {
+    font-weight: 700;
+}

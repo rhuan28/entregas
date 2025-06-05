@@ -1,10 +1,7 @@
-// services/routeOptimization.js - Versão atualizada com prioridade "Média"
-const axios = require('axios');
-require('dotenv').config();
-
+// services/routeOptimization.js 
 class RouteOptimizationService {
     constructor() {
-        this.apiKey = process.env.GOOGLE_MAPS_API_KEY;
+        this.apiKey = process.env.Maps_API_KEY;
         this.directionsURL = 'https://maps.googleapis.com/maps/api/directions/json';
         
         // Configurações de otimização inteligente
@@ -17,7 +14,7 @@ class RouteOptimizationService {
     }
 
     // Otimiza rota com suporte para ordem manual, prioridade e desvio inteligente
-    async optimizeRoute(deliveries, depot, circularRoute = true, manualOrder = {}) {
+    async optimizeRoute(deliveries, depot, circularRoute = true, manualOrder = {}, stopTimeMinutes = 8) {
         try {
             if (deliveries.length === 0) {
                 throw new Error('Nenhuma entrega para otimizar');
@@ -62,7 +59,7 @@ class RouteOptimizationService {
             // Integra paradas na confeitaria
             const finalOrder = this.integratePickupStops(optimizedOrder, pickupStops, manualOrder);
             
-            return this.calculateRouteWithOrderedStops(finalOrder, depot, circularRoute);
+            return this.calculateRouteWithOrderedStops(finalOrder, depot, circularRoute, stopTimeMinutes);
 
         } catch (error) {
             console.error('❌ Erro na otimização:', error.message);
@@ -78,7 +75,8 @@ class RouteOptimizationService {
                     address: delivery.address,
                     order: index,
                     type: delivery.type || 'delivery',
-                    priority: delivery.priority
+                    priority: delivery.priority,
+                    eta_seconds: null
                 }));
 
             return {
@@ -636,8 +634,9 @@ class RouteOptimizationService {
         }
     }
 
-    async calculateRouteWithOrderedStops(stops, depot, circularRoute) {
+    async calculateRouteWithOrderedStops(stops, depot, circularRoute, stopTimeMinutes) {
         try {
+            const stopTimeSeconds = stopTimeMinutes * 60; // Converte para segundos
             const waypoints = stops.map(stop => ({
                 location: stop.address,
                 stopover: true
@@ -661,17 +660,37 @@ class RouteOptimizationService {
             }
             
             const route = response.data.routes[0];
+            const legs = route.legs;
             
+            let cumulativeEtaSeconds = 0;
             let totalDistance = 0;
             let totalDuration = 0;
-            
-            route.legs.forEach(leg => {
-                totalDistance += leg.distance.value;
-                totalDuration += leg.duration.value;
+
+            const stopsWithEta = stops.map((stop, index) => {
+                const legToThisStop = legs[index];
+                if (!legToThisStop) {
+                    return { ...stop, eta_seconds: null };
+                }
+
+                // ETA para chegar nesta parada é o tempo acumulado até agora + o tempo de viagem desta perna
+                const arrivalTimeSeconds = cumulativeEtaSeconds + legToThisStop.duration.value;
+                const stopWithEta = { ...stop, eta_seconds: arrivalTimeSeconds };
+
+                // Para a PRÓXIMA parada, o tempo acumulado será a hora de chegada NESTA parada + o tempo de parada.
+                // Paradas de pickup na confeitaria não adicionam tempo de parada, a menos que seja configurado.
+                // O tempo da parada na confeitaria é considerado como o tempo para "zerar" e recomeçar a contagem de paradas.
+                const currentStopTime = stop.type === 'pickup' ? 0 : stopTimeSeconds;
+                cumulativeEtaSeconds = arrivalTimeSeconds + currentStopTime;
+
+                // Acumula distância e duração totais da viagem
+                totalDistance += legToThisStop.distance.value;
+                totalDuration += legToThisStop.duration.value;
+
+                return stopWithEta;
             });
             
             return {
-                optimizedOrder: stops,
+                optimizedOrder: stopsWithEta,
                 totalDistance: totalDistance,
                 totalDuration: totalDuration,
                 polyline: route.overview_polyline.points
@@ -680,14 +699,14 @@ class RouteOptimizationService {
             console.error('Erro ao calcular rota:', error);
             
             return {
-                optimizedOrder: stops,
+                optimizedOrder: stops.map(s => ({ ...s, eta_seconds: null })),
                 totalDistance: 0,
                 totalDuration: 0,
                 polyline: null
             };
         }
     }
-
+    
     handlePickupOnlyRoute(pickupStops, depot, circularRoute, manualOrder) {
         const optimizedOrder = pickupStops.map((stop, index) => ({
             shipmentId: stop.id,

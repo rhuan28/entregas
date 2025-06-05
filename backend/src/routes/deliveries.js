@@ -562,7 +562,7 @@ async function checkColumnExists(tableName, columnName) {
     }
 }
 
-// Otimiza rota com ordem manual e paradas - VERSÂO ATUALIZADA
+// Otimiza rota com ordem manual e paradas - VERSÃO ATUALIZADA
 router.post('/optimize', async (req, res) => {
     try {
         const { date, manualOrder, pickupStops } = req.body;
@@ -586,12 +586,9 @@ router.post('/optimize', async (req, res) => {
         settingsResult.rows.forEach(row => {
             settings[row.setting_key] = row.setting_value;
         });
-        
-        // Verifica se já existe uma rota para esta data
-        const existingRoutes = await db.query(
-            'SELECT id FROM routes WHERE route_date = $1',
-            [routeDate]
-        );
+
+        // Adiciona a leitura do tempo de parada
+        const stopTimeMinutes = parseInt(settings.stop_time, 10) || 8;
         
         // Busca todas as entregas do dia ordenadas por nova escala de prioridade
         const deliveries = await db.query(
@@ -662,9 +659,9 @@ router.post('/optimize', async (req, res) => {
             ['pending', routeDate, 'optimized']
         );
         
-        // Otimiza a rota usando a nova escala de prioridades
-        const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder);
-        
+        // Otimiza a rota usando a nova escala de prioridades e passando o tempo de parada
+        const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder, stopTimeMinutes);
+                
         // Prepara dados da rota para salvar
         const routeData = {
             route_date: routeDate,

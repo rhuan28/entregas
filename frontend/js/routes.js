@@ -576,6 +576,33 @@ function renderDeliveriesList() {
 }
 
 function renderDeliveryItemContent(item, index) {
+    // 1. O bloco de cálculo do ETA é movido para o início da função.
+    // Assim, ele é executado para QUALQUER item (entrega ou parada).
+    let etaHtml = '';
+    if (currentRoute && currentRoute.optimizedOrder && Array.isArray(currentRoute.optimizedOrder)) {
+        const optimizedStop = currentRoute.optimizedOrder.find(stop =>
+            (stop.deliveryId && stop.deliveryId === item.id) ||
+            (stop.id && stop.id === item.id)
+        );
+
+        if (optimizedStop && typeof optimizedStop.eta_seconds !== 'undefined' && optimizedStop.eta_seconds !== null) {
+            const etaSeconds = optimizedStop.eta_seconds;
+            const now = new Date();
+            const arrivalTime = new Date(now.getTime() + etaSeconds * 1000);
+            const arrivalTimeString = arrivalTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const durationMinutes = Math.round(etaSeconds / 60);
+
+            // Usando a classe CSS que definimos anteriormente para um código mais limpo
+            etaHtml = `
+                <div class="delivery-eta">
+                    ⏳ Chegada prevista: <strong>${arrivalTimeString}</strong> (em ${durationMinutes} min)
+                </div>
+            `;
+        }
+    }
+
+    // 2. Agora, renderizamos o HTML específico para cada tipo de item,
+    //    incluindo a variável 'etaHtml' em ambos.
     if (item.type === 'pickup') {
         return `
             <div class="delivery-header">
@@ -586,12 +613,15 @@ function renderDeliveryItemContent(item, index) {
             </div>
             <p><strong>📍 Endereço:</strong> ${item.address || confeitariaLocation.address}</p>
             <p><strong>📦 Ação:</strong> ${item.product_description || 'Recarregar produtos / Pausa'}</p>
+            
+            ${etaHtml}
+
             <div class="delivery-actions">
                 <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
                     <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
                     <input type="number" id="order-input-${item.id}"
-                           class="order-input" 
-                           value="${manualOrder[item.id] || ''}" 
+                           class="order-input"
+                           value="${manualOrder[item.id] || ''}"
                            min="1"
                            onchange="updateManualOrder('${item.id}', this.value)"
                            style="width:50px; padding:3px; text-align:center;">
@@ -604,7 +634,7 @@ function renderDeliveryItemContent(item, index) {
             </span>
         `;
     } else {
-        // Código para entregas normais permanece igual
+        // Renderiza a entrega normal
         const orderNumberDisplay = item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
         const productDisplay = item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
         const priorityEmoji = getPriorityEmoji(item.priority);
@@ -620,6 +650,9 @@ function renderDeliveryItemContent(item, index) {
             <p><strong>📍 Endereço:</strong> ${item.address}</p>
             <p><strong>📦 Produto:</strong> ${item.product_description}</p>
             ${item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
+            
+            ${etaHtml} 
+            
             <div class="delivery-actions">
                 <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
                     <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
@@ -634,11 +667,11 @@ function renderDeliveryItemContent(item, index) {
                 <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
                 <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗 Link</button>
         `;
-        
+
         if (item.status === 'in_transit') {
             content += `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
         }
-        
+
         content += `<button onclick="deleteDelivery('${item.id}', '${item.status}', 'delivery')" class="btn btn-danger btn-sm">🗑️ Excluir</button>
             </div>
             <span class="status status-${item.status}" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em;">${getStatusLabel(item.status, 'delivery')}</span>
