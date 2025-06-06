@@ -707,15 +707,20 @@ function renderDeliveryItemContent(item, index) {
         `;
     } else {
         const orderNumberDisplay = item.order_number ? `<p><strong>📋</strong> #${item.order_number}</p>` : '';
-        const productDisplay = item.product_name ? `<span class="priority-indicator">${item.product_name}</span>` : '';
-        const priorityEmoji = getPriorityEmoji(item.priority);
+        const priority = item.priority || 0;
+        const priorityClass = getPriorityClass(priority);
+        const priorityEmoji = getPriorityEmoji(priority);
+        
+        // Corrigir a classe da prioridade do produto
+        const productDisplay = item.product_name ? 
+            `<span class="priority-indicator priority-${priorityClass}">${item.product_name}</span>` : '';
 
         return `
             <div class="delivery-header">
                 <div class="delivery-info">
                     <h3>${item.customer_name} ${productDisplay}</h3>
-                    <span class="priority priority-${getPriorityClass(item.priority)}">
-                        ${priorityEmoji} ${getPriorityLabel(item.priority)}
+                    <span class="priority priority-${priorityClass}">
+                        ${priorityEmoji} ${getPriorityLabel(priority)}
                     </span>
                 </div>
                 <div class="order-control">

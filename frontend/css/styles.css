@@ -2029,3 +2029,241 @@ textarea:focus-visible {
         font-size: 12px;
     }
 }
+
+/* ============================== */
+/* 🔹 CORREÇÕES DE ESTILO - ADICIONAR AO styles.css */
+/* ============================== */
+
+/* Corrigir prioridade das 6 fatias e outros produtos */
+.priority-indicator {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+/* Classes específicas para cada prioridade */
+.priority-indicator.priority-0,
+.priority-indicator.priority-normal {
+    background-color: #F6FFED;
+    color: #52C41A;
+    border: 1px solid #B7EB8F;
+}
+
+.priority-indicator.priority-1,
+.priority-indicator.priority-media {
+    background-color: #FFF7E6;
+    color: #FAAD14;
+    border: 1px solid #FFD666;
+}
+
+.priority-indicator.priority-2,
+.priority-indicator.priority-alta {
+    background-color: #FFF2E6;
+    color: #FD7E14;
+    border: 1px solid #FFAC6B;
+}
+
+.priority-indicator.priority-3,
+.priority-indicator.priority-urgente {
+    background-color: #FFF2F0;
+    color: #FF4D4F;
+    border: 1px solid #FFADD2;
+}
+
+/* Melhorar os botões de ordenação */
+.order-btn {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    width: 26px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.order-btn:hover:not(:disabled) {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.order-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.order-btn:disabled {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+/* Melhorar o número da ordem */
+.order-number {
+    background: white;
+    border: 1px solid var(--primary-color);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--primary-color);
+    min-width: 38px;
+    text-align: center;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* Melhorar o container de controle */
+.order-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(229, 181, 179, 0.08);
+    border-radius: 8px;
+    padding: 6px;
+    border: 1px solid rgba(229, 181, 179, 0.2);
+}
+
+/* Ajustar espaçamento dos botões */
+.order-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+/* Melhorar o layout do cabeçalho da entrega */
+.delivery-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 15px;
+}
+
+.delivery-info {
+    flex: 1;
+    min-width: 0; /* Permite quebra de texto */
+}
+
+.delivery-info h3 {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    line-height: 1.3;
+    word-wrap: break-word;
+}
+
+/* Corrigir as badges de prioridade principais */
+.priority {
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    display: inline-block;
+}
+
+/* Garantir que as prioridades tenham as cores corretas */
+.priority-0,
+.priority.priority-0 { 
+    background-color: #F6FFED; 
+    color: #52C41A;
+    border: 1px solid #B7EB8F;
+}
+
+.priority-1,
+.priority.priority-1 { 
+    background-color: #FFF7E6; 
+    color: #FAAD14;
+    border: 1px solid #FFD666;
+}
+
+.priority-2,
+.priority.priority-2 { 
+    background-color: #FFF2E6; 
+    color: #FD7E14;
+    border: 1px solid #FFAC6B;
+}
+
+.priority-3,
+.priority.priority-3 { 
+    background-color: #FFF2F0; 
+    color: #FF4D4F;
+    border: 1px solid #FFADD2;
+}
+
+/* Melhorar responsividade */
+@media (max-width: 768px) {
+    .delivery-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .order-control {
+        align-self: flex-end;
+        gap: 8px;
+        padding: 4px;
+    }
+
+    .order-number {
+        min-width: 32px;
+        padding: 4px 8px;
+        font-size: 13px;
+    }
+
+    .order-btn {
+        width: 24px;
+        height: 20px;
+        font-size: 10px;
+    }
+
+    .delivery-info h3 {
+        font-size: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .order-control {
+        gap: 6px;
+        padding: 3px;
+    }
+
+    .order-number {
+        min-width: 30px;
+        padding: 3px 6px;
+        font-size: 12px;
+    }
+
+    .order-btn {
+        width: 22px;
+        height: 18px;
+        font-size: 9px;
+    }
+}
+
+/* Hover effect no item de entrega */
+.delivery-item:hover .order-control {
+    background: rgba(229, 181, 179, 0.12);
+    border-color: rgba(229, 181, 179, 0.3);
+}
+
+.delivery-item:hover .order-number {
+    border-color: var(--primary-hover);
+    color: var(--primary-hover);
+}
