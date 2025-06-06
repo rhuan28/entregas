@@ -373,6 +373,9 @@ function updateMapMarkers(itemsToMark) {
     });
 }
 
+// CORREÇÃO PARA O ARQUIVO: frontend/js/routes.js
+// Substitua a função showOptimizedRoute() existente por esta versão corrigida
+
 function showOptimizedRoute(route) {
     if (typeof google === 'undefined' || !google.maps || !map || !directionsService || !directionsRenderer) {
         console.error("Mapa ou serviços de direção não estão prontos para mostrar rota otimizada.");
@@ -382,113 +385,258 @@ function showOptimizedRoute(route) {
 
     clearMarkers();
 
-    const orderedWaypoints = [];
-    const allStopsForDisplay = [];
-
     if (!route || !route.optimizedOrder || route.optimizedOrder.length === 0) {
         console.warn("showOptimizedRoute chamada sem optimizedOrder válido ou com optimizedOrder vazio.");
         if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
         updateMapMarkers(deliveryData || []);
         return;
     }
+
+    console.log("🔧 DEBUGGING - Dados recebidos da otimização:");
+    console.log("📊 Total de itens na rota otimizada:", route.optimizedOrder.length);
     
+    // LOG DETALHADO para debug
+    route.optimizedOrder.forEach((item, idx) => {
+        console.log(`Item ${idx}:`, {
+            id: item.id || item.deliveryId,
+            type: item.type,
+            customer_name: item.customer_name,
+            address: item.address
+        });
+    });
+
+    const orderedWaypoints = [];
+    const allStopsForDisplay = [];
+    const processedIds = new Set(); // Para evitar duplicatas
+
     route.optimizedOrder.forEach((item, index) => {
+        // CORREÇÃO 1: Determinar ID corretamente
+        const itemId = item.id || item.deliveryId || item.shipmentId;
+        
+        // CORREÇÃO 2: Evitar duplicatas
+        if (processedIds.has(itemId)) {
+            console.warn(`⚠️ Item duplicado detectado e ignorado: ID ${itemId}`);
+            return; // Pula este item
+        }
+        processedIds.add(itemId);
+
         let stopDetails;
+
         if (item.type === 'pickup') {
             stopDetails = {
-                id: item.id || item.deliveryId || item.shipmentId,
+                id: itemId,
                 lat: parseFloat(item.lat) || confeitariaLocation.lat,
                 lng: parseFloat(item.lng) || confeitariaLocation.lng,
                 address: item.address || confeitariaLocation.address,
                 type: 'pickup',
                 customer_name: 'Confeitaria Demiplié',
                 product_description: 'Parada na confeitaria',
-                priority: 0, // ← ADICIONADO
-                order: item.order
-            };
-        } else {
-            const fullDeliveryDetails = (deliveryData || []).find(d => d.id === item.deliveryId);
-            stopDetails = {
-                ...fullDeliveryDetails, // ← Dados completos primeiro
-                ...item,               // ← Sobrescreve apenas necessário
-                id: item.deliveryId,
-                type: 'delivery',
-                customer_name: fullDeliveryDetails?.customer_name || item.customer_name || 'Cliente Desconhecido',
+                priority: 0,
+                order: item.order,
                 indexInRoute: index
             };
+        } else {
+            // CORREÇÃO 3: Buscar dados completos da entrega
+            const fullDeliveryDetails = (deliveryData || []).find(d => 
+                d.id === itemId || 
+                d.id === item.deliveryId || 
+                d.id === parseInt(itemId)
+            );
+
+            if (!fullDeliveryDetails) {
+                console.error(`❌ Entrega não encontrada nos dados locais: ID ${itemId}`);
+                console.log("📋 IDs disponíveis:", (deliveryData || []).map(d => d.id));
+                return; // Pula este item se não encontrar os dados
+            }
+
+            stopDetails = {
+                ...fullDeliveryDetails, // Dados completos primeiro
+                id: itemId,             // ID consistente
+                type: 'delivery',
+                indexInRoute: index,
+                // Sobrescreve com dados da otimização se existirem
+                eta_seconds: item.eta_seconds,
+                vehicle_time_seconds: item.vehicle_time_seconds,
+                order: item.order
+            };
         }
 
-        allStopsForDisplay.push({ ...stopDetails, indexInRoute: index }); // ← SÓ ESTA LINHA
+        // CORREÇÃO 4: Validar dados essenciais
+        if (!stopDetails.address) {
+            console.error(`❌ Parada sem endereço: ${JSON.stringify(stopDetails)}`);
+            return; // Pula paradas sem endereço
+        }
 
-        // Log para debug
-        console.log(`Stop ${index}:`, {
-            id: stopDetails.id,
-            priority: stopDetails.priority,
-            type: stopDetails.type,
-            customer_name: stopDetails.customer_name
+        if (!stopDetails.lat || !stopDetails.lng) {
+            console.error(`❌ Parada sem coordenadas: ${JSON.stringify(stopDetails)}`);
+            return; // Pula paradas sem coordenadas
+        }
+
+        allStopsForDisplay.push(stopDetails);
+
+        // Adiciona aos waypoints para o Google Maps
+        orderedWaypoints.push({
+            location: stopDetails.address,
+            stopover: true
         });
 
-        if (stopDetails.address) {
-            orderedWaypoints.push({
-                location: stopDetails.address,
-                stopover: true
-            });
-        } else {
-            console.warn("Parada sem endereço não será adicionada aos waypoints:", stopDetails);
-        }
+        console.log(`✅ Parada ${index} processada:`, {
+            id: stopDetails.id,
+            customer: stopDetails.customer_name,
+            address: stopDetails.address.substring(0, 50) + "..."
+        });
     });
 
+    // CORREÇÃO 5: Validação final
+    console.log("🎯 RESULTADO da correção:");
+    console.log(`📍 Waypoints únicos criados: ${orderedWaypoints.length}`);
+    console.log(`🏷️ Marcadores para exibição: ${allStopsForDisplay.length}`);
+    
     if (orderedWaypoints.length === 0) {
-        console.warn('Nenhuma parada válida com endereço para desenhar a rota otimizada.');
+        console.warn('❌ Nenhuma parada válida com endereço para desenhar a rota otimizada.');
         if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
         updateMapMarkers(allStopsForDisplay.length > 0 ? allStopsForDisplay : (deliveryData || []));
         return;
     }
 
+    // CORREÇÃO 6: Atualizar marcadores no mapa
     updateMapMarkers(allStopsForDisplay);
 
+    // CORREÇÃO 7: Preparar requisição para Google Directions API
     const origin = settings.origin_address;
     let waypointsForAPIRequest = [];
     let destinationForAPIRequest;
 
     if (orderedWaypoints.length === 1) {
+        // Caso especial: apenas 1 parada
         destinationForAPIRequest = orderedWaypoints[0].location;
     } else {
-        waypointsForAPIRequest = orderedWaypoints.slice(0, -1).map(wp => ({ location: wp.location, stopover: true }));
+        // Múltiplas paradas
+        waypointsForAPIRequest = orderedWaypoints.slice(0, -1);
         destinationForAPIRequest = orderedWaypoints[orderedWaypoints.length - 1].location;
     }
 
+    // Se rota circular, ajustar destino e waypoints
     if (settings.circular_route === 'true') {
-        if (orderedWaypoints.length > 0) {
-            waypointsForAPIRequest = orderedWaypoints.map(wp => ({ location: wp.location, stopover: true }));
-        }
-        destinationForAPIRequest = origin;
+        waypointsForAPIRequest = orderedWaypoints; // Todas as paradas como waypoints
+        destinationForAPIRequest = origin;          // Volta para origem
     }
     
     const request = {
         origin: origin,
         destination: destinationForAPIRequest,
         waypoints: waypointsForAPIRequest,
-        optimizeWaypoints: false,
+        optimizeWaypoints: false, // NÃO otimizar - já está otimizado
         travelMode: google.maps.TravelMode.DRIVING,
         language: 'pt-BR'
     };
     
-    console.log("Enviando requisição para DirectionsService:", JSON.stringify(request, null, 2));
+    console.log("📡 Requisição final para DirectionsService:");
+    console.log("🏁 Origem:", request.origin);
+    console.log("🎯 Destino:", request.destination);
+    console.log("🛣️ Waypoints:", request.waypoints.length);
+    console.log("📋 Waypoints detalhados:", request.waypoints.map(w => w.location.substring(0, 50) + "..."));
 
+    // CORREÇÃO 8: Fazer requisição ao Google Directions
     directionsService.route(request, (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
+            console.log("✅ Rota traçada com sucesso!");
             directionsRenderer.setDirections(result);
+            
             if (result.routes && result.routes[0] && result.routes[0].bounds) {
                 map.fitBounds(result.routes[0].bounds);
             }
         } else {
-            console.error('Erro ao traçar rota otimizada no DirectionsService:', status, result);
+            console.error('❌ Erro ao traçar rota otimizada no DirectionsService:', status);
             showToast(`Erro ao exibir rota otimizada no mapa: ${status}`, 'error');
+            
+            // Log da requisição que falhou para debug
+            console.error("📋 Requisição que falhou:", JSON.stringify(request, null, 2));
         }
     });
+
     updateRouteStats();
 }
+
+// FUNÇÃO AUXILIAR: Validar dados de entrada da otimização
+function validateOptimizationResult(route) {
+    if (!route) {
+        console.error("❌ Rota é null/undefined");
+        return false;
+    }
+    
+    if (!route.optimizedOrder) {
+        console.error("❌ optimizedOrder está ausente");
+        return false;
+    }
+    
+    if (!Array.isArray(route.optimizedOrder)) {
+        console.error("❌ optimizedOrder não é um array");
+        return false;
+    }
+    
+    if (route.optimizedOrder.length === 0) {
+        console.warn("⚠️ optimizedOrder está vazio");
+        return false;
+    }
+    
+    // Validar cada item
+    const invalidItems = route.optimizedOrder.filter(item => {
+        const hasId = !!(item.id || item.deliveryId || item.shipmentId);
+        const hasAddress = !!item.address;
+        return !hasId || !hasAddress;
+    });
+    
+    if (invalidItems.length > 0) {
+        console.error("❌ Itens inválidos encontrados:", invalidItems);
+        return false;
+    }
+    
+    console.log("✅ Dados de otimização validados com sucesso");
+    return true;
+}
+
+// FUNÇÃO PARA DEBUG: Analisar dados de otimização
+window.debugOptimization = function(route) {
+    console.log("\n🔍 ANÁLISE DETALHADA DA OTIMIZAÇÃO");
+    console.log("=====================================");
+    
+    if (!validateOptimizationResult(route)) {
+        console.log("❌ Dados inválidos - interrompendo análise");
+        return;
+    }
+    
+    console.log("📊 Estatísticas:");
+    console.log(`   - Total de itens: ${route.optimizedOrder.length}`);
+    console.log(`   - Distância total: ${route.totalDistance}m`);
+    console.log(`   - Duração total: ${route.totalDuration}s`);
+    
+    console.log("\n📍 Itens da rota:");
+    route.optimizedOrder.forEach((item, idx) => {
+        const id = item.id || item.deliveryId || item.shipmentId;
+        console.log(`   ${idx + 1}. ID: ${id} | Tipo: ${item.type || 'delivery'} | Cliente: ${item.customer_name || 'N/A'}`);
+    });
+    
+    console.log("\n🗺️ Dados locais disponíveis:");
+    console.log(`   - Total de entregas: ${(deliveryData || []).length}`);
+    console.log(`   - IDs das entregas:`, (deliveryData || []).map(d => d.id));
+    
+    // Verificar correspondência
+    const unmatchedIds = [];
+    route.optimizedOrder.forEach(item => {
+        const id = item.id || item.deliveryId || item.shipmentId;
+        const found = (deliveryData || []).find(d => d.id == id);
+        if (!found && item.type !== 'pickup') {
+            unmatchedIds.push(id);
+        }
+    });
+    
+    if (unmatchedIds.length > 0) {
+        console.warn("⚠️ IDs não encontrados nos dados locais:", unmatchedIds);
+    } else {
+        console.log("✅ Todos os IDs foram encontrados nos dados locais");
+    }
+};
 
 // --- Carregamento de Dados ---
 async function loadDeliveries() {
@@ -1421,3 +1569,5 @@ window.getStatusLabel = getStatusLabel;
 window.renderDeliveryItemContent = renderDeliveryItemContent;
 window.addPickupStop = addPickupStop;
 window.removePickupStop = removePickupStop;
+window.showOptimizedRoute = showOptimizedRoute;
+window.validateOptimizationResult = validateOptimizationResult;
