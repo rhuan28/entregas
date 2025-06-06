@@ -1,4 +1,4 @@
-// frontend/js/routes.js - Versão corrigida e atualizada
+// frontend/js/routes.js - Versão otimizada e compacta
 
 const API_URL = window.API_URL || 'http://localhost:3000/api';
 const socket = typeof io !== 'undefined' ? io(window.API_CONFIG?.SOCKET_URL || 'http://localhost:3000') : null;
@@ -12,7 +12,7 @@ let driverMarker = null;
 let deliveryData = [];
 let pickupStops = [];
 let manualOrder = {};
-let isRouteAlreadyOptimized = false; // Esta nova linha controla o comportamento
+let isRouteAlreadyOptimized = false;
 
 const PRODUCT_CONFIG = {
     'bentocake': { name: 'Bentocake', priority: 0, size: 'P', description: 'Bentocake individual', color: '#28a745' },
@@ -94,7 +94,7 @@ function getPriorityColor(priority) {
         1: '#ffc107', // Amarelo - Média
         0: '#28a745'  // Verde - Normal
     };
-    return colors[parseInt(priority)] || '#28a745'; // Verde como fallback
+    return colors[parseInt(priority)] || '#28a745';
 }
 
 function getPriorityEmoji(priority) {
@@ -162,12 +162,13 @@ function getStatusLabel(status, itemType = 'delivery') {
     };
     return labels[status] || status;
 }
+
 // --- Funções do Mapa e Autocomplete ---
 
 function initializeAddressAutocomplete() {
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
         console.warn('Google Maps Places library não está pronta para o Autocomplete. Tentando em 1s.');
-        setTimeout(initializeAddressAutocomplete, 1000); // Tenta novamente em 1 segundo
+        setTimeout(initializeAddressAutocomplete, 1000);
         return;
     }
     console.log("Tentando inicializar Autocomplete do Google Places...");
@@ -180,7 +181,7 @@ function initializeAddressAutocomplete() {
                 addressInput,
                 {
                     types: ['address'],
-                    componentRestrictions: { country: 'br' } // Restringe ao Brasil
+                    componentRestrictions: { country: 'br' }
                 }
             );
             autocompleteNew.addListener('place_changed', function() {
@@ -188,10 +189,7 @@ function initializeAddressAutocomplete() {
                 if (place && place.formatted_address) {
                     addressInput.value = place.formatted_address;
                 } else if (place && place.name && !place.formatted_address) {
-                    // Se for um POI sem endereço formatado, usa o nome.
-                    // Mas idealmente o usuário deve buscar um endereço completo.
                     console.warn('Autocomplete para nova entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
-                     // addressInput.value = place.name; // Descomente se quiser usar o nome do POI
                 } else {
                     console.warn('Autocomplete para nova entrega: local não encontrado ou sem endereço formatado.');
                 }
@@ -221,7 +219,6 @@ function initializeAddressAutocomplete() {
                     editAddressInput.value = place.formatted_address;
                 } else if (place && place.name && !place.formatted_address) {
                     console.warn('Autocomplete para edição de entrega: Local selecionado é um POI sem endereço formatado completo. Usando nome:', place.name);
-                    // editAddressInput.value = place.name;
                 } else {
                      console.warn('Autocomplete para edição de entrega: local não encontrado ou sem endereço formatado.');
                 }
@@ -230,13 +227,8 @@ function initializeAddressAutocomplete() {
         } catch(e) {
             console.error("Erro ao inicializar autocomplete para 'edit-address':", e);
         }
-    } else {
-        // Este elemento pode não existir até que o formulário de edição seja aberto.
-        // Pode ser necessário inicializá-lo quando o formulário de edição se torna visível.
-        // console.warn("'edit-address' não encontrado para o Autocomplete no carregamento inicial.");
     }
 }
-
 
 function initMap() {
     if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
@@ -299,11 +291,8 @@ window.onGoogleMapsApiLoaded = async function() {
     console.log("Google Maps API carregada via callback (routes.js).");
     initMap(); 
     await loadPageData(); 
-    // initializeAddressAutocomplete() será chamado dentro de loadPageData após outras inicializações,
-    // ou diretamente aqui se for mais robusto garantir a ordem.
     initializeAddressAutocomplete();
 };
-
 
 function clearMarkers() {
     markers.forEach(marker => marker.setMap(null));
@@ -314,7 +303,6 @@ function updateMapMarkers(itemsToMark) {
     clearMarkers();
     if (!itemsToMark || typeof google === 'undefined' || !google.maps) return;
 
-        // ADICIONE ESTES LOGS:
     console.log('🎯 Marcadores recebidos:', itemsToMark.length);
     itemsToMark.forEach((item, idx) => {
         console.log(`Item ${idx}:`, {
@@ -331,16 +319,16 @@ function updateMapMarkers(itemsToMark) {
             return;
         }
     
-    const markerLabel = typeof item.indexInRoute !== 'undefined' ? (item.indexInRoute + 1).toString() : (idx + 1).toString();
+        const markerLabel = typeof item.indexInRoute !== 'undefined' ? (item.indexInRoute + 1).toString() : (idx + 1).toString();
 
-    const markerIconConfig = {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(parseInt(item.priority) || 0),
-        fillOpacity: 0.9,
-        strokeColor: 'white',
-        strokeWeight: 2
-    };
+        const markerIconConfig = {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: item.type === 'pickup' ? '#FFB6C1' : getPriorityColor(parseInt(item.priority) || 0),
+            fillOpacity: 0.9,
+            strokeColor: 'white',
+            strokeWeight: 2
+        };
 
         const marker = new google.maps.Marker({
             position: { lat: parseFloat(item.lat), lng: parseFloat(item.lng) },
@@ -373,9 +361,6 @@ function updateMapMarkers(itemsToMark) {
     });
 }
 
-// CORREÇÃO PARA O ARQUIVO: frontend/js/routes.js
-// Substitua a função showOptimizedRoute() existente por esta versão corrigida
-
 function showOptimizedRoute(route) {
     if (typeof google === 'undefined' || !google.maps || !map || !directionsService || !directionsRenderer) {
         console.error("Mapa ou serviços de direção não estão prontos para mostrar rota otimizada.");
@@ -395,7 +380,6 @@ function showOptimizedRoute(route) {
     console.log("🔧 DEBUGGING - Dados recebidos da otimização:");
     console.log("📊 Total de itens na rota otimizada:", route.optimizedOrder.length);
     
-    // LOG DETALHADO para debug
     route.optimizedOrder.forEach((item, idx) => {
         console.log(`Item ${idx}:`, {
             id: item.id || item.deliveryId,
@@ -407,16 +391,14 @@ function showOptimizedRoute(route) {
 
     const orderedWaypoints = [];
     const allStopsForDisplay = [];
-    const processedIds = new Set(); // Para evitar duplicatas
+    const processedIds = new Set();
 
     route.optimizedOrder.forEach((item, index) => {
-        // CORREÇÃO 1: Determinar ID corretamente
         const itemId = item.id || item.deliveryId || item.shipmentId;
         
-        // CORREÇÃO 2: Evitar duplicatas
         if (processedIds.has(itemId)) {
             console.warn(`⚠️ Item duplicado detectado e ignorado: ID ${itemId}`);
-            return; // Pula este item
+            return;
         }
         processedIds.add(itemId);
 
@@ -436,7 +418,6 @@ function showOptimizedRoute(route) {
                 indexInRoute: index
             };
         } else {
-            // CORREÇÃO 3: Buscar dados completos da entrega
             const fullDeliveryDetails = (deliveryData || []).find(d => 
                 d.id === itemId || 
                 d.id === item.deliveryId || 
@@ -446,35 +427,32 @@ function showOptimizedRoute(route) {
             if (!fullDeliveryDetails) {
                 console.error(`❌ Entrega não encontrada nos dados locais: ID ${itemId}`);
                 console.log("📋 IDs disponíveis:", (deliveryData || []).map(d => d.id));
-                return; // Pula este item se não encontrar os dados
+                return;
             }
 
             stopDetails = {
-                ...fullDeliveryDetails, // Dados completos primeiro
-                id: itemId,             // ID consistente
+                ...fullDeliveryDetails,
+                id: itemId,
                 type: 'delivery',
                 indexInRoute: index,
-                // Sobrescreve com dados da otimização se existirem
                 eta_seconds: item.eta_seconds,
                 vehicle_time_seconds: item.vehicle_time_seconds,
                 order: item.order
             };
         }
 
-        // CORREÇÃO 4: Validar dados essenciais
         if (!stopDetails.address) {
             console.error(`❌ Parada sem endereço: ${JSON.stringify(stopDetails)}`);
-            return; // Pula paradas sem endereço
+            return;
         }
 
         if (!stopDetails.lat || !stopDetails.lng) {
             console.error(`❌ Parada sem coordenadas: ${JSON.stringify(stopDetails)}`);
-            return; // Pula paradas sem coordenadas
+            return;
         }
 
         allStopsForDisplay.push(stopDetails);
 
-        // Adiciona aos waypoints para o Google Maps
         orderedWaypoints.push({
             location: stopDetails.address,
             stopover: true
@@ -487,7 +465,6 @@ function showOptimizedRoute(route) {
         });
     });
 
-    // CORREÇÃO 5: Validação final
     console.log("🎯 RESULTADO da correção:");
     console.log(`📍 Waypoints únicos criados: ${orderedWaypoints.length}`);
     console.log(`🏷️ Marcadores para exibição: ${allStopsForDisplay.length}`);
@@ -499,34 +476,29 @@ function showOptimizedRoute(route) {
         return;
     }
 
-    // CORREÇÃO 6: Atualizar marcadores no mapa
     updateMapMarkers(allStopsForDisplay);
 
-    // CORREÇÃO 7: Preparar requisição para Google Directions API
     const origin = settings.origin_address;
     let waypointsForAPIRequest = [];
     let destinationForAPIRequest;
 
     if (orderedWaypoints.length === 1) {
-        // Caso especial: apenas 1 parada
         destinationForAPIRequest = orderedWaypoints[0].location;
     } else {
-        // Múltiplas paradas
         waypointsForAPIRequest = orderedWaypoints.slice(0, -1);
         destinationForAPIRequest = orderedWaypoints[orderedWaypoints.length - 1].location;
     }
 
-    // Se rota circular, ajustar destino e waypoints
     if (settings.circular_route === 'true') {
-        waypointsForAPIRequest = orderedWaypoints; // Todas as paradas como waypoints
-        destinationForAPIRequest = origin;          // Volta para origem
+        waypointsForAPIRequest = orderedWaypoints;
+        destinationForAPIRequest = origin;
     }
     
     const request = {
         origin: origin,
         destination: destinationForAPIRequest,
         waypoints: waypointsForAPIRequest,
-        optimizeWaypoints: false, // NÃO otimizar - já está otimizado
+        optimizeWaypoints: false,
         travelMode: google.maps.TravelMode.DRIVING,
         language: 'pt-BR'
     };
@@ -537,7 +509,6 @@ function showOptimizedRoute(route) {
     console.log("🛣️ Waypoints:", request.waypoints.length);
     console.log("📋 Waypoints detalhados:", request.waypoints.map(w => w.location.substring(0, 50) + "..."));
 
-    // CORREÇÃO 8: Fazer requisição ao Google Directions
     directionsService.route(request, (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
             console.log("✅ Rota traçada com sucesso!");
@@ -550,7 +521,6 @@ function showOptimizedRoute(route) {
             console.error('❌ Erro ao traçar rota otimizada no DirectionsService:', status);
             showToast(`Erro ao exibir rota otimizada no mapa: ${status}`, 'error');
             
-            // Log da requisição que falhou para debug
             console.error("📋 Requisição que falhou:", JSON.stringify(request, null, 2));
         }
     });
@@ -558,89 +528,9 @@ function showOptimizedRoute(route) {
     updateRouteStats();
 }
 
-// FUNÇÃO AUXILIAR: Validar dados de entrada da otimização
-function validateOptimizationResult(route) {
-    if (!route) {
-        console.error("❌ Rota é null/undefined");
-        return false;
-    }
-    
-    if (!route.optimizedOrder) {
-        console.error("❌ optimizedOrder está ausente");
-        return false;
-    }
-    
-    if (!Array.isArray(route.optimizedOrder)) {
-        console.error("❌ optimizedOrder não é um array");
-        return false;
-    }
-    
-    if (route.optimizedOrder.length === 0) {
-        console.warn("⚠️ optimizedOrder está vazio");
-        return false;
-    }
-    
-    // Validar cada item
-    const invalidItems = route.optimizedOrder.filter(item => {
-        const hasId = !!(item.id || item.deliveryId || item.shipmentId);
-        const hasAddress = !!item.address;
-        return !hasId || !hasAddress;
-    });
-    
-    if (invalidItems.length > 0) {
-        console.error("❌ Itens inválidos encontrados:", invalidItems);
-        return false;
-    }
-    
-    console.log("✅ Dados de otimização validados com sucesso");
-    return true;
-}
-
-// FUNÇÃO PARA DEBUG: Analisar dados de otimização
-window.debugOptimization = function(route) {
-    console.log("\n🔍 ANÁLISE DETALHADA DA OTIMIZAÇÃO");
-    console.log("=====================================");
-    
-    if (!validateOptimizationResult(route)) {
-        console.log("❌ Dados inválidos - interrompendo análise");
-        return;
-    }
-    
-    console.log("📊 Estatísticas:");
-    console.log(`   - Total de itens: ${route.optimizedOrder.length}`);
-    console.log(`   - Distância total: ${route.totalDistance}m`);
-    console.log(`   - Duração total: ${route.totalDuration}s`);
-    
-    console.log("\n📍 Itens da rota:");
-    route.optimizedOrder.forEach((item, idx) => {
-        const id = item.id || item.deliveryId || item.shipmentId;
-        console.log(`   ${idx + 1}. ID: ${id} | Tipo: ${item.type || 'delivery'} | Cliente: ${item.customer_name || 'N/A'}`);
-    });
-    
-    console.log("\n🗺️ Dados locais disponíveis:");
-    console.log(`   - Total de entregas: ${(deliveryData || []).length}`);
-    console.log(`   - IDs das entregas:`, (deliveryData || []).map(d => d.id));
-    
-    // Verificar correspondência
-    const unmatchedIds = [];
-    route.optimizedOrder.forEach(item => {
-        const id = item.id || item.deliveryId || item.shipmentId;
-        const found = (deliveryData || []).find(d => d.id == id);
-        if (!found && item.type !== 'pickup') {
-            unmatchedIds.push(id);
-        }
-    });
-    
-    if (unmatchedIds.length > 0) {
-        console.warn("⚠️ IDs não encontrados nos dados locais:", unmatchedIds);
-    } else {
-        console.log("✅ Todos os IDs foram encontrados nos dados locais");
-    }
-};
-
 // --- Carregamento de Dados ---
 async function loadDeliveries() {
-    isRouteAlreadyOptimized = false; // Adicione esta linha
+    isRouteAlreadyOptimized = false;
     try {
         const routeDate = getRouteDate();
         console.log(`Carregando entregas para a data ${routeDate}...`);
@@ -724,41 +614,48 @@ function renderDeliveriesList() {
     }
 }
 
-// --- ALTERAÇÃO PRINCIPAL: Função de renderização com a lógica correta para os tempos ---
+// --- FUNÇÃO DE RENDERIZAÇÃO OTIMIZADA E COMPACTA ---
 function renderDeliveryItemContent(item, index) {
-    let arrivalHtml = '';
-    let vehicleTimeHtml = '';
+    let timesHtml = '';
 
+    // Verifica se há dados de otimização para mostrar tempos
     if (currentRoute && currentRoute.optimizedOrder && Array.isArray(currentRoute.optimizedOrder)) {
         const optimizedStop = currentRoute.optimizedOrder.find(stop =>
-
             (stop.deliveryId === item.id) || (stop.id === item.id)
         );
 
         if (optimizedStop) {
-            // Cálculo da Previsão de Chegada (ETA)
-
+            const times = [];
+            
+            // Tempo de chegada (ETA)
             if (typeof optimizedStop.eta_seconds === 'number') {
-                const totalDurationMinutes = Math.round(optimizedStop.eta_seconds / 60);
+                const totalMinutes = Math.round(optimizedStop.eta_seconds / 60);
                 const arrivalTime = new Date(new Date().getTime() + optimizedStop.eta_seconds * 1000);
                 const arrivalTimeString = arrivalTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                 
-                arrivalHtml = `
-                    <div class="delivery-eta arrival-time">
-                        🕒 Chegada Prevista: <strong>${arrivalTimeString}</strong> (em ${totalDurationMinutes} min)
+                times.push(`
+                    <div class="delivery-time-item arrival-time">
+                        <span class="icon">🕒</span>
+                        <span class="time">${arrivalTimeString}</span>
+                        <span>(${totalMinutes}min)</span>
                     </div>
-                `;
+                `);
             }
 
-            // Cálculo do Tempo no Veículo (só para entregas, não para a confeitaria)
-
+            // Tempo no veículo (só para entregas)
             if (item.type !== 'pickup' && typeof optimizedStop.vehicle_time_seconds === 'number') {
-                const vehicleDurationMinutes = Math.round(optimizedStop.vehicle_time_seconds / 60);
-                vehicleTimeHtml = `
-                    <div class="delivery-eta vehicle-time">
-                        🍰 Tempo no Veículo: <strong>${vehicleDurationMinutes} min</strong>
+                const vehicleMinutes = Math.round(optimizedStop.vehicle_time_seconds / 60);
+                times.push(`
+                    <div class="delivery-time-item vehicle-time">
+                        <span class="icon">🍰</span>
+                        <span class="time">${vehicleMinutes}min</span>
+                        <span>veículo</span>
                     </div>
-                `;
+                `);
+            }
+
+            if (times.length > 0) {
+                timesHtml = `<div class="delivery-times">${times.join('')}</div>`;
             }
         }
     }
@@ -767,67 +664,52 @@ function renderDeliveryItemContent(item, index) {
         return `
             <div class="delivery-header">
                 <h3>🏪 ${item.customer_name || 'Parada na Confeitaria'}</h3>
-                <span class="priority priority-0" style="background-color: #28a745; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">🏪 Parada</span>
+                <span class="priority priority-0">🏪 Parada</span>
             </div>
-            <p><strong>📍 Endereço:</strong> ${item.address || confeitariaLocation.address}</p>
-            <p><strong>📦 Ação:</strong> ${item.product_description || 'Recarregar produtos / Pausa'}</p>
-            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
-                ${arrivalHtml}
-
-            </div>
+            <p><strong>📍</strong> ${item.address || confeitariaLocation.address}</p>
+            <p><strong>📦</strong> ${item.product_description || 'Recarregar produtos'}</p>
+            ${timesHtml}
             <div class="delivery-actions">
-                <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
-                    <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
-                    <input type="number" id="order-input-${item.id}" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)" style="width:50px; padding:3px; text-align:center;">
+                <div class="manual-order">
+                    <label>Ordem:</label>
+                    <input type="number" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)">
                 </div>
-                <button onclick="showDeliveryOnMap(${parseFloat(item.lat || confeitariaLocation.lat)}, ${parseFloat(item.lng || confeitariaLocation.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
-                <button onclick="deleteDelivery('${item.id}', 'pickup', 'pickup')" class="btn btn-danger btn-sm">🗑️ Remover</button>
+                <button onclick="showDeliveryOnMap(${parseFloat(item.lat || confeitariaLocation.lat)}, ${parseFloat(item.lng || confeitariaLocation.lng)})" class="btn btn-secondary btn-sm">🗺️</button>
+                <button onclick="deleteDelivery('${item.id}', 'pickup', 'pickup')" class="btn btn-danger btn-sm">🗑️</button>
             </div>
-            <span class="status" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em; background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9;">${getStatusLabel('pickup', 'pickup')}</span>
+            <span class="status">${getStatusLabel('pickup', 'pickup')}</span>
         `;
     } else {
-        const orderNumberDisplay = item.order_number ? `<p><strong>📋 Pedido #:</strong> ${item.order_number}</p>` : '';
-        const productDisplay = item.product_name ? `<span class="priority-indicator priority-${getPriorityClass(item.priority)}">${item.product_name}</span>` : '';
+        const orderNumberDisplay = item.order_number ? `<p><strong>📋</strong> #${item.order_number}</p>` : '';
+        const productDisplay = item.product_name ? `<span class="priority-indicator">${item.product_name}</span>` : '';
         const priorityEmoji = getPriorityEmoji(item.priority);
 
-        let content = `
+        return `
             <div class="delivery-header">
                 <h3>${item.customer_name} ${productDisplay}</h3>
-                <span class="priority priority-${getPriorityClass(item.priority)}" style="background-color: ${getPriorityColor(item.priority)}; color: white; padding: 3px 7px; border-radius: 4px; font-size: 0.9em;">
+                <span class="priority priority-${getPriorityClass(item.priority)}">
                     ${priorityEmoji} ${getPriorityLabel(item.priority)}
-
                 </span>
             </div>
             ${orderNumberDisplay}
-
-            <p><strong>📍 Endereço:</strong> ${item.address}</p>
-            <p><strong>📦 Produto:</strong> ${item.product_description}</p>
-            ${item.customer_phone ? `<p><strong>📞 Telefone:</strong> ${item.customer_phone}</p>` : ''}
-
-            
-            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
-                ${arrivalHtml}
-
-                ${vehicleTimeHtml}
-
-            </div>
-            
+            <p><strong>📍</strong> ${item.address}</p>
+            <p><strong>📦</strong> ${item.product_description}</p>
+            ${item.customer_phone ? `<p><strong>📞</strong> ${item.customer_phone}</p>` : ''}
+            ${timesHtml}
             <div class="delivery-actions">
-                 <div class="manual-order" style="display:flex; align-items:center; gap:5px;">
-                    <label for="order-input-${item.id}" style="font-size:0.9em;">Ordem:</label>
-                    <input type="number" id="order-input-${item.id}" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)" style="width:50px; padding:3px; text-align:center;">
+                <div class="manual-order">
+                    <label>Ordem:</label>
+                    <input type="number" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)">
                 </div>
-                <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️ Editar</button>
-                <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️ Mapa</button>
-                <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗 Link</button>
+                <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️</button>
+                <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️</button>
+                <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗</button>
+                ${item.status === 'in_transit' ? 
+                    `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅</button>` : ''}
+                <button onclick="deleteDelivery('${item.id}', '${item.status}', 'delivery')" class="btn btn-danger btn-sm">🗑️</button>
+            </div>
+            <span class="status status-${item.status}">${getStatusLabel(item.status, 'delivery')}</span>
         `;
-        if (item.status === 'in_transit') {
-            content += `<button onclick="completeDelivery('${item.id}')" class="btn btn-success btn-sm">✅ Entregar</button>`;
-        }
-        content += `<button onclick="deleteDelivery('${item.id}', '${item.status}', 'delivery')" class="btn btn-danger btn-sm">🗑️ Excluir</button></div>
-            <span class="status status-${item.status}" style="display:inline-block; margin-top:10px; padding: 3px 7px; border-radius:4px; font-size:0.9em;">${getStatusLabel(item.status, 'delivery')}</span>
-        `;
-        return content;
     }
 }
 
@@ -962,18 +844,10 @@ async function deleteDelivery(deliveryId, status, itemType = 'delivery') {
         if (!confirm('Tem certeza que deseja remover esta parada na confeitaria?')) return;
         
         try {
-            // Remove da lista local de pickupStops
             pickupStops = pickupStops.filter(stop => stop.id !== deliveryId);
-            
-            // Remove da ordem manual
             delete manualOrder[deliveryId];
-            
-            // Re-renderiza a lista
             renderDeliveriesList();
-            
-            // Atualiza os marcadores do mapa
             updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
-            
             showToast('Parada na confeitaria removida com sucesso!', 'success');
             return;
         } catch (error) {
@@ -983,7 +857,6 @@ async function deleteDelivery(deliveryId, status, itemType = 'delivery') {
         }
     }
     
-    // Para entregas normais, continua com o processo normal
     if (!confirm('Tem certeza que deseja excluir esta entrega? Esta ação não pode ser desfeita.')) return;
     
     try {
@@ -1157,7 +1030,7 @@ async function loadSettings() {
         if (kmRateEl) kmRateEl.value = settings.km_rate || '2.50';
 
         confeitariaLocation.address = settings.origin_address;
-        if (settings.origin_address && typeof google !== 'undefined' && google.maps) { // Verifica se google.maps existe
+        if (settings.origin_address && typeof google !== 'undefined' && google.maps) {
             const geocoder = new google.maps.Geocoder();
             geocoder.geocode({ 'address': settings.origin_address }, function(results, status) {
                 if (status == 'OK' && results[0]) {
@@ -1251,19 +1124,17 @@ function addPickupStop() {
         customer_name: 'Confeitaria Demiplié',
         product_description: 'Parada na confeitaria - recarregar produtos',
         priority: 0,
-        status: 'pickup' // Define um status específico para paradas
+        status: 'pickup'
     };
     
     pickupStops.push(newPickupStop);
     
-    // Define ordem manual como próxima disponível
     const maxOrder = Math.max(0, ...Object.values(manualOrder).filter(v => typeof v === 'number'));
     manualOrder[newPickupId] = maxOrder + 1;
     
     console.log('Nova parada adicionada:', newPickupStop);
     console.log('Ordem manual atualizada:', manualOrder);
     
-    // Re-renderiza e atualiza mapa
     renderDeliveriesList();
     updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
     
@@ -1276,7 +1147,6 @@ function removePickupStop(stopId) {
     }
     
     try {
-        // Remove da lista de pickupStops
         const initialLength = pickupStops.length;
         pickupStops = pickupStops.filter(stop => stop.id !== stopId);
         
@@ -1286,13 +1156,11 @@ function removePickupStop(stopId) {
             return;
         }
         
-        // Remove da ordem manual
         delete manualOrder[stopId];
         
         console.log('Parada removida:', stopId);
         console.log('Paradas restantes:', pickupStops.length);
         
-        // Re-renderiza e atualiza mapa
         renderDeliveriesList();
         updateMapMarkers([...deliveryData.map(d=>({...d, type:'delivery'})), ...pickupStops]);
         
@@ -1330,9 +1198,7 @@ async function loadPageData() {
     if (typeof window.ensurePriorityFeatures === "function") window.ensurePriorityFeatures();
     else if (typeof addPriorityLegend === "function") addPriorityLegend();
     updateRouteStats();
-    // O Autocomplete é melhor inicializado depois que a API do Google estiver totalmente carregada.
-    // A função onGoogleMapsApiLoaded já chama initializeAddressAutocomplete.
-    // Se a API já estiver carregada no momento do onload, podemos chamar aqui também como garantia.
+    
     if (typeof google !== 'undefined' && google.maps && google.maps.places) {
         initializeAddressAutocomplete();
     }
@@ -1379,15 +1245,11 @@ window.onload = async () => {
     }
 
     if (typeof google !== 'undefined' && typeof google.maps !== 'undefined') {
-        // Se a API já está carregada, onGoogleMapsApiLoaded pode não ter sido chamado via callback.
-        // Então, chamamos initMap e loadPageData diretamente.
-        initMap(); // Garante que o mapa seja inicializado
+        initMap();
         await loadPageData();
-        initializeAddressAutocomplete(); // Garante que o autocomplete seja inicializado
+        initializeAddressAutocomplete();
     } else {
         console.log("Aguardando API do Google Maps carregar para executar initMap e loadPageData...");
-        // onGoogleMapsApiLoaded (definido globalmente ou no callback da API)
-        // se encarregará de chamar initMap, loadPageData e initializeAddressAutocomplete.
     }
 
     if (socket) {
@@ -1395,7 +1257,7 @@ window.onload = async () => {
         socket.on('location-update', (data) => {
             if (currentRoute && data.routeId === currentRoute.routeId) {
                 if (!driverMarker && map && typeof google !== 'undefined' && google.maps) {
-                    driverMarker = new google.maps.Marker({ map: map, title: 'Entregador', /* icon: ... */ });
+                    driverMarker = new google.maps.Marker({ map: map, title: 'Entregador' });
                 }
                 if (driverMarker && typeof google !== 'undefined' && google.maps) driverMarker.setPosition(new google.maps.LatLng(data.lat, data.lng));
             }
@@ -1414,125 +1276,119 @@ window.onload = async () => {
     }
 };
 
-    // --- Otimização de Rota ---
-    document.addEventListener('DOMContentLoaded', function() {
-        // Bloco 1: Lógica do formulário de nova entrega (mantido como está)
-        const deliveryForm = document.getElementById('delivery-form');
-        if (deliveryForm) {
-            deliveryForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                const delivery = Object.fromEntries(formData.entries());
-                delivery.order_date = getRouteDate();
-                
-                const productSelect = document.getElementById('product-select');
-                if (productSelect && productSelect.value && PRODUCT_CONFIG[productSelect.value]) {
-                    delivery.product_type = productSelect.value;
-                    delivery.product_name = getProductDisplayName(productSelect.value);
-                }
-
-                try {
-                    const response = await fetch(`${API_URL}/deliveries`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(delivery)
-                    });
-                    const result = await response.json();
-                    if (response.ok) {
-                        showToast('Entrega adicionada com sucesso!', 'success');
-                        e.target.reset();
-                        await loadDeliveries();
-                    } else {
-                        throw new Error(result.error || 'Erro ao adicionar entrega');
-                    }
-                } catch (error) {
-                    console.error('Erro ao adicionar entrega:', error);
-                    showToast('Erro ao adicionar entrega: ' + error.message, 'error');
-                }
-            });
-        }
-
-        // Bloco 2: Lógica dos botões de otimização (com a nova estrutura)
-        const optimizeRouteBtn = document.getElementById('optimize-route');
-        const autoOptimizeBtn = document.getElementById('auto-optimize-route');
-
-        // Função central que lida com a otimização
-        async function runOptimization({ useManualOrder, triggeredBy }) {
-            if (!optimizeRouteBtn || !autoOptimizeBtn) return;
-
-            optimizeRouteBtn.disabled = true;
-            autoOptimizeBtn.disabled = true;
-            const originalText = triggeredBy.innerHTML;
-            triggeredBy.innerHTML = '<span class="loading"></span>';
+// --- Otimização de Rota ---
+document.addEventListener('DOMContentLoaded', function() {
+    // Formulário de nova entrega
+    const deliveryForm = document.getElementById('delivery-form');
+    if (deliveryForm) {
+        deliveryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const delivery = Object.fromEntries(formData.entries());
+            delivery.order_date = getRouteDate();
+            
+            const productSelect = document.getElementById('product-select');
+            if (productSelect && productSelect.value && PRODUCT_CONFIG[productSelect.value]) {
+                delivery.product_type = productSelect.value;
+                delivery.product_name = getProductDisplayName(productSelect.value);
+            }
 
             try {
-                // Se for otimização automática (clique na lâmpada ou 1º clique no botão principal), envia ordem manual vazia
-                const orderToSend = useManualOrder ? manualOrder : {};
-
-                const requestData = {
-                    date: getRouteDate(),
-                    manualOrder: orderToSend,
-                    pickupStops: pickupStops.map(stop => ({
-                        id: stop.id, address: stop.address, lat: stop.lat, lng: stop.lng, type: 'pickup'
-                    }))
-                };
-                
-                const response = await fetch(`${API_URL}/deliveries/optimize`, {
+                const response = await fetch(`${API_URL}/deliveries`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
+                    body: JSON.stringify(delivery)
                 });
-            
                 const result = await response.json();
-                
-                if (response.ok && result.routeId) {
-                    isRouteAlreadyOptimized = true;
-                    currentRoute = result;
-                    
-                    const newManualOrder = {};
-                    result.optimizedOrder.forEach((item) => {
-                        const itemId = item.deliveryId || item.id;
-                        if (itemId) newManualOrder[itemId] = item.order;
-                    });
-                    manualOrder = newManualOrder;
-                    
-                    showToast(`Rota otimizada! ${result.optimizedOrder.length} paradas.`, 'success');
-                    showOptimizedRoute(currentRoute);
-                    updateRouteStats();
-                    renderDeliveriesList();
+                if (response.ok) {
+                    showToast('Entrega adicionada com sucesso!', 'success');
+                    e.target.reset();
+                    await loadDeliveries();
                 } else {
-                    throw new Error(result.error || result.message || "Erro desconhecido na otimização");
+                    throw new Error(result.error || 'Erro ao adicionar entrega');
                 }
             } catch (error) {
-                console.error('Erro ao otimizar rota:', error);
-                showToast('Erro ao otimizar rota: ' + error.message, 'error');
-            } finally {
-                optimizeRouteBtn.disabled = false;
-                autoOptimizeBtn.disabled = false;
-                triggeredBy.innerHTML = originalText;
+                console.error('Erro ao adicionar entrega:', error);
+                showToast('Erro ao adicionar entrega: ' + error.message, 'error');
             }
-        }
+        });
+    }
 
-        // Listener do botão principal "Otimizar Rota"
-        if (optimizeRouteBtn) {
-            optimizeRouteBtn.addEventListener('click', function() {
-                // A regra de negócio principal:
-                // O botão principal só respeita a ordem manual se a rota JÁ TIVER SIDO otimizada antes.
-                // No primeiro clique, ele força a otimização automática.
-                runOptimization({ useManualOrder: isRouteAlreadyOptimized, triggeredBy: this });
+    // Botões de otimização
+    const optimizeRouteBtn = document.getElementById('optimize-route');
+    const autoOptimizeBtn = document.getElementById('auto-optimize-route');
+
+    async function runOptimization({ useManualOrder, triggeredBy }) {
+        if (!optimizeRouteBtn || !autoOptimizeBtn) return;
+
+        optimizeRouteBtn.disabled = true;
+        autoOptimizeBtn.disabled = true;
+        const originalText = triggeredBy.innerHTML;
+        triggeredBy.innerHTML = '<span class="loading"></span>';
+
+        try {
+            const orderToSend = useManualOrder ? manualOrder : {};
+
+            const requestData = {
+                date: getRouteDate(),
+                manualOrder: orderToSend,
+                pickupStops: pickupStops.map(stop => ({
+                    id: stop.id, address: stop.address, lat: stop.lat, lng: stop.lng, type: 'pickup'
+                }))
+            };
+            
+            const response = await fetch(`${API_URL}/deliveries/optimize`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
             });
+        
+            const result = await response.json();
+            
+            if (response.ok && result.routeId) {
+                isRouteAlreadyOptimized = true;
+                currentRoute = result;
+                
+                const newManualOrder = {};
+                result.optimizedOrder.forEach((item) => {
+                    const itemId = item.deliveryId || item.id;
+                    if (itemId) newManualOrder[itemId] = item.order;
+                });
+                manualOrder = newManualOrder;
+                
+                showToast(`Rota otimizada! ${result.optimizedOrder.length} paradas.`, 'success');
+                showOptimizedRoute(currentRoute);
+                updateRouteStats();
+                renderDeliveriesList();
+            } else {
+                throw new Error(result.error || result.message || "Erro desconhecido na otimização");
+            }
+        } catch (error) {
+            console.error('Erro ao otimizar rota:', error);
+            showToast('Erro ao otimizar rota: ' + error.message, 'error');
+        } finally {
+            optimizeRouteBtn.disabled = false;
+            autoOptimizeBtn.disabled = false;
+            triggeredBy.innerHTML = originalText;
         }
+    }
 
-        // Listener do botão de lâmpada "Otimização Automática"
-        if (autoOptimizeBtn) {
-            autoOptimizeBtn.addEventListener('click', function() {
-                // Este botão SEMPRE força a otimização automática.
-                runOptimization({ useManualOrder: false, triggeredBy: this });
-            });
-        }
-    });
+    // Listener do botão principal "Otimizar Rota"
+    if (optimizeRouteBtn) {
+        optimizeRouteBtn.addEventListener('click', function() {
+            runOptimization({ useManualOrder: isRouteAlreadyOptimized, triggeredBy: this });
+        });
+    }
 
+    // Listener do botão de lâmpada "Otimização Automática"
+    if (autoOptimizeBtn) {
+        autoOptimizeBtn.addEventListener('click', function() {
+            runOptimization({ useManualOrder: false, triggeredBy: this });
+        });
+    }
+});
 
+// Funções globais
 window.editDelivery = window.editDelivery || function(idString) {
     const id = parseInt(idString);
     const delivery = deliveryData.find(d => d.id === id);
@@ -1558,16 +1414,18 @@ window.editDelivery = window.editDelivery || function(idString) {
         container.scrollIntoView({ behavior: 'smooth' });
     }
 };
+
 window.cancelEdit = window.cancelEdit || function() {
     const container = document.getElementById('edit-delivery-container');
     if (container) container.style.display = 'none';
     const form = document.getElementById('edit-delivery-form');
     if (form) form.reset();
 };
+
 window.deleteDelivery = deleteDelivery;
 window.getStatusLabel = getStatusLabel;
 window.renderDeliveryItemContent = renderDeliveryItemContent;
 window.addPickupStop = addPickupStop;
 window.removePickupStop = removePickupStop;
 window.showOptimizedRoute = showOptimizedRoute;
-window.validateOptimizationResult = validateOptimizationResult;
+window.updateManualOrder = updateManualOrder;
