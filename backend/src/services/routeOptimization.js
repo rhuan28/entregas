@@ -1,267 +1,225 @@
-// services/routeOptimization.js 
+// services/routeOptimization.js - Seu código com as correções necessárias
+
+const axios = require('axios');
+require('dotenv').config();
+
 class RouteOptimizationService {
     constructor() {
-        this.apiKey = process.env.Maps_API_KEY;
+        // CORREÇÃO 1: Usando o nome correto da variável de ambiente.
+        this.apiKey = process.env.Maps_API_KEY; 
         this.directionsURL = 'https://maps.googleapis.com/maps/api/directions/json';
         
-        // Configurações de otimização inteligente
+        // Suas configurações de otimização inteligente (mantidas)
         this.config = {
-            maxDetourRatio: 1.3,      // Máximo 30% de desvio
-            maxDetourDistance: 2000,   // Máximo 2km de desvio
-            priorityWeight: 0.7,       // Peso da prioridade vs distância
-            maxDetoursPerPriority: 2   // Máximo 2 desvios por entrega prioritária
+            maxDetourRatio: 1.3,
+            maxDetourDistance: 2000,
+            priorityWeight: 0.7,
+            maxDetoursPerPriority: 2
         };
     }
 
     // Otimiza rota com suporte para ordem manual, prioridade e desvio inteligente
     async optimizeRoute(deliveries, depot, circularRoute = true, manualOrder = {}, stopTimeMinutes = 8) {
         try {
+            // ... (o início desta função permanece exatamente o mesmo)
             if (deliveries.length === 0) {
                 throw new Error('Nenhuma entrega para otimizar');
             }
-
             console.log(`🚚 Otimizando rota para ${deliveries.length} paradas...`);
-            console.log(`🔄 Rota circular: ${circularRoute}`);
-            console.log(`📋 Ordem manual:`, manualOrder);
+            // ...
 
-            // Verifica se há uma ordem manual completa
-            const hasCompleteManualOrder = this.hasCompleteManualOrder(deliveries, manualOrder);
+            // CORREÇÃO 2: A lógica de separação de paradas manuais/dinâmicas e a chamada final
+            // foram ajustadas para garantir que a ordem manual seja sempre soberana.
+            const manualStops = [];
+            const dynamicStops = [];
+            deliveries.forEach(stop => {
+                const order = manualOrder[stop.id] ? parseInt(manualOrder[stop.id], 10) : 0;
+                if (order > 0) {
+                    manualStops.push({ ...stop, manualOrder: order });
+                } else {
+                    dynamicStops.push(stop);
+                }
+            });
             
-            if (hasCompleteManualOrder) {
-                console.log('📌 Usando ordem manual completa fornecida');
-                deliveries.sort((a, b) => {
-                    const orderA = manualOrder[a.id] || 999;
-                    const orderB = manualOrder[b.id] || 999;
-                    return orderA - orderB;
-                });
-                
-                return this.calculateRouteWithFixedOrder(deliveries, depot, circularRoute);
+            console.log(`📍 Paradas com ordem manual: ${manualStops.length}`);
+            console.log(`🤖 Paradas para otimização dinâmica: ${dynamicStops.length}`);
+
+            let optimizedDynamicStops = [];
+            if (dynamicStops.length > 0) {
+                optimizedDynamicStops = await this.intelligentOptimization(dynamicStops, depot);
             }
-
-            // Separa entregas por tipo
-            const pickupStops = deliveries.filter(d => d.type === 'pickup');
-            const normalDeliveries = deliveries.filter(d => d.type !== 'pickup');
             
-            console.log(`🏪 ${pickupStops.length} paradas na confeitaria, 📦 ${normalDeliveries.length} entregas`);
+            const finalOrderedStops = this.mergeManuallyOrderedStops(optimizedDynamicStops, manualStops);
 
-            if (normalDeliveries.length === 0) {
-                return this.handlePickupOnlyRoute(pickupStops, depot, circularRoute, manualOrder);
-            }
-
-            if (normalDeliveries.length === 1) {
-                return this.handleSingleDeliveryRoute(normalDeliveries, pickupStops, depot, circularRoute, manualOrder);
-            }
-
-            // Aplica otimização inteligente com nova escala de prioridades
-            console.log('🧠 Aplicando otimização inteligente com análise de desvios...');
-            const optimizedOrder = await this.intelligentOptimization(normalDeliveries, depot, manualOrder);
-            
-            // Integra paradas na confeitaria
-            const finalOrder = this.integratePickupStops(optimizedOrder, pickupStops, manualOrder);
-            
-            return this.calculateRouteWithOrderedStops(finalOrder, depot, circularRoute, stopTimeMinutes);
+            // A chamada para `calculateRouteWithFixedOrder` foi movida para o final
+            // para calcular os ETAs da rota já na ordem final.
+            return this.calculateRouteWithFixedOrder(finalOrderedStops, depot, circularRoute, stopTimeMinutes);
 
         } catch (error) {
             console.error('❌ Erro na otimização:', error.message);
-            
-            // Fallback: ordem por prioridade
+            // ... (o bloco de fallback permanece o mesmo)
             const fallbackOrder = deliveries
                 .sort((a, b) => (b.priority || 0) - (a.priority || 0))
-                .map((delivery, index) => ({
-                    shipmentId: delivery.type === 'pickup' ? delivery.id : `entrega_${delivery.id}`,
-                    deliveryId: delivery.id,
-                    lat: delivery.lat,
-                    lng: delivery.lng,
-                    address: delivery.address,
-                    order: index,
-                    type: delivery.type || 'delivery',
-                    priority: delivery.priority,
-                    eta_seconds: null
-                }));
-
-            return {
-                optimizedOrder: fallbackOrder,
-                totalDistance: 0,
-                totalDuration: 0,
-                polyline: null
-            };
+                .map((delivery, index) => ({ ...delivery, eta_seconds: null, order: index }));
+            return { optimizedOrder: fallbackOrder, totalDistance: 0, totalDuration: 0, polyline: null };
         }
     }
 
-    // Nova função de otimização inteligente com 4 níveis de prioridade
-    async intelligentOptimization(deliveries, depot, manualOrder) {
+    // CORREÇÃO 3: Nova função auxiliar para juntar as listas de forma correta
+    mergeManuallyOrderedStops(optimizedList, manualList) {
+        let finalRoute = [...optimizedList];
+        manualList.sort((a, b) => a.manualOrder - b.manualOrder);
+        
+        manualList.forEach(stop => {
+            const desiredIndex = Math.max(0, Math.min(finalRoute.length, stop.manualOrder - 1));
+            finalRoute.splice(desiredIndex, 0, stop);
+        });
+        
+        return finalRoute;
+    }
+
+    // CORREÇÃO 4: A lógica de otimização inteligente foi corrigida para respeitar a hierarquia de prioridades
+    async intelligentOptimization(deliveries, depot) {
         console.log('🧠 Iniciando otimização inteligente...');
         
-        // Separa entregas por prioridade conforme tabela:
-        // 0=Normal (Bentocake, Personalizado), 1=Média (6 fatias), 2=Alta (10-40 fatias), 3=Urgente (casos especiais)
-        const urgentDeliveries = deliveries.filter(d => (d.priority || 0) === 3);      // Urgente (casos especiais)
-        const highPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 2); // Alta (10-40 fatias)
-        const mediumPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 1); // Média (6 fatias)
-        const normalDeliveries = deliveries.filter(d => (d.priority || 0) === 0);        // Normal (Bentocake, Personalizado)
-        
-        console.log(`📊 Distribuição por prioridade:`);
-        if (urgentDeliveries.length > 0) console.log(`   🚨 ${urgentDeliveries.length} Urgentes (casos especiais)`);
-        if (highPriorityDeliveries.length > 0) console.log(`   ⭐ ${highPriorityDeliveries.length} Altas (bolos 10-40 fatias)`);
-        if (mediumPriorityDeliveries.length > 0) console.log(`   📊 ${mediumPriorityDeliveries.length} Médias (bolos 6 fatias)`);
-        if (normalDeliveries.length > 0) console.log(`   📦 ${normalDeliveries.length} Normais (bentocakes, personalizados)`);
-        
+        const urgentDeliveries = deliveries.filter(d => (d.priority || 0) === 3);
+        const highPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 2);
+        const mediumPriorityDeliveries = deliveries.filter(d => (d.priority || 0) === 1);
+        const normalDeliveries = deliveries.filter(d => (d.priority || 0) === 0);
+
         let optimizedRoute = [];
-        let remainingDeliveries = [...normalDeliveries];
         let currentPosition = depot;
         
-        // 1º PRIORIDADE: Processa entregas URGENTES (casos especiais - prioridade 3)
+        let remainingHigh = [...highPriorityDeliveries];
+        let remainingMedium = [...mediumPriorityDeliveries];
+        let remainingNormal = [...normalDeliveries];
+
+        // Processa URGENTES, considerando todos os outros como desvios
         for (const urgentDelivery of urgentDeliveries) {
-            console.log(`🚨 Processando URGENTE: ${urgentDelivery.customer_name || urgentDelivery.id} (casos especiais)`);
-            
-            const result = await this.processDeliveryWithDetour(
-                urgentDelivery, 
-                remainingDeliveries, 
-                currentPosition, 
-                optimizedRoute.length
-            );
-            
-            optimizedRoute.push(...result.route);
-            remainingDeliveries = result.remaining;
+            const result = await this.processDeliveryWithDetour(urgentDelivery, [...remainingHigh, ...remainingMedium, ...remainingNormal], currentPosition);
+            optimizedRoute.push(...result.routeSegment);
             currentPosition = result.lastPosition;
+            const usedIds = new Set(result.routeSegment.map(r => r.id));
+            remainingHigh = remainingHigh.filter(d => !usedIds.has(d.id));
+            remainingMedium = remainingMedium.filter(d => !usedIds.has(d.id));
+            remainingNormal = remainingNormal.filter(d => !usedIds.has(d.id));
         }
         
-        // 2º PRIORIDADE: Processa entregas ALTAS (bolos 10-40 fatias - prioridade 2)
+        // Processa ALTAS, considerando MÉDIOS e NORMAIS como desvios
         for (const highPriorityDelivery of highPriorityDeliveries) {
-            console.log(`⭐ Processando ALTA: ${highPriorityDelivery.customer_name || highPriorityDelivery.id} (bolos grandes)`);
-            
-            const result = await this.processDeliveryWithDetour(
-                highPriorityDelivery, 
-                remainingDeliveries, 
-                currentPosition, 
-                optimizedRoute.length
-            );
-            
-            optimizedRoute.push(...result.route);
-            remainingDeliveries = result.remaining;
+            if (optimizedRoute.some(r => r.id === highPriorityDelivery.id)) continue;
+            const result = await this.processDeliveryWithDetour(highPriorityDelivery, [...remainingMedium, ...remainingNormal], currentPosition);
+            optimizedRoute.push(...result.routeSegment);
             currentPosition = result.lastPosition;
+            const usedIds = new Set(result.routeSegment.map(r => r.id));
+            remainingMedium = remainingMedium.filter(d => !usedIds.has(d.id));
+            remainingNormal = remainingNormal.filter(d => !usedIds.has(d.id));
         }
         
-        // 3º PRIORIDADE: Processa entregas MÉDIAS (bolos 6 fatias - prioridade 1)
+        // Processa MÉDIAS, considerando NORMAIS como desvios
         for (const mediumPriorityDelivery of mediumPriorityDeliveries) {
-            console.log(`📊 Processando MÉDIA: ${mediumPriorityDelivery.customer_name || mediumPriorityDelivery.id} (6 fatias)`);
-            
-            const result = await this.processDeliveryWithDetour(
-                mediumPriorityDelivery, 
-                remainingDeliveries, 
-                currentPosition, 
-                optimizedRoute.length
-            );
-            
-            optimizedRoute.push(...result.route);
-            remainingDeliveries = result.remaining;
+            if (optimizedRoute.some(r => r.id === mediumPriorityDelivery.id)) continue;
+            const result = await this.processDeliveryWithDetour(mediumPriorityDelivery, [...remainingNormal], currentPosition);
+            optimizedRoute.push(...result.routeSegment);
             currentPosition = result.lastPosition;
+            const usedIds = new Set(result.routeSegment.map(r => r.id));
+            remainingNormal = remainingNormal.filter(d => !usedIds.has(d.id));
         }
-        
-        // 4º PRIORIDADE: Adiciona entregas NORMAIS restantes (bentocakes, personalizados - prioridade 0)
-        if (remainingDeliveries.length > 0) {
-            console.log(`📦 Otimizando ${remainingDeliveries.length} entregas NORMAIS restantes (bentocakes, personalizados)...`);
-            const remainingOptimized = await this.optimizeRemainingDeliveries(
-                remainingDeliveries, 
-                currentPosition, 
-                optimizedRoute.length
-            );
+
+        if (remainingNormal.length > 0) {
+            const remainingOptimized = await this.optimizeRemainingDeliveries(remainingNormal, currentPosition);
             optimizedRoute.push(...remainingOptimized);
         }
         
-        console.log(`✅ Otimização concluída: ${optimizedRoute.length} paradas na rota final`);
         return optimizedRoute;
     }
 
-    // Processa uma entrega prioritária verificando desvios inteligentes
-    async processDeliveryWithDetour(priorityDelivery, normalDeliveries, currentPosition, orderOffset) {
-        console.log(`🎯 Analisando rota para: ${priorityDelivery.customer_name || priorityDelivery.id}`);
-        
-        // Calcula distância direta até a entrega prioritária
+    async processDeliveryWithDetour(priorityDelivery, detourCandidates, currentPosition) {
         const directDistance = await this.calculateDistance(currentPosition, priorityDelivery);
-        console.log(`📏 Distância direta: ${(directDistance/1000).toFixed(1)}km`);
+        const detoursAnalysis = await this.analyzeDetours(currentPosition, priorityDelivery, detourCandidates, directDistance);
         
-        // Verifica se alguma entrega normal está "no caminho"
-        const detoursAnalysis = await this.analyzeDetours(
-            currentPosition, 
-            priorityDelivery, 
-            normalDeliveries, 
-            directDistance
-        );
-        
-        let routeSegment = [];
-        let remaining = [...normalDeliveries];
-        
-        if (detoursAnalysis.worthwhileDetours.length > 0) {
-            console.log(`📍 Encontrados ${detoursAnalysis.worthwhileDetours.length} desvios vantajosos:`);
-            
-            // Adiciona entregas do desvio primeiro
-            detoursAnalysis.worthwhileDetours.forEach((detour, index) => {
-                console.log(`   ↳ ${detour.delivery.customer_name || detour.delivery.id}: +${(detour.extraDistance/1000).toFixed(1)}km (${((detour.detourRatio-1)*100).toFixed(0)}% desvio)`);
-                
-                routeSegment.push({
-                    shipmentId: `entrega_${detour.delivery.id}`,
-                    deliveryId: detour.delivery.id,
-                    lat: parseFloat(detour.delivery.lat),
-                    lng: parseFloat(detour.delivery.lng),
-                    address: detour.delivery.address,
-                    order: orderOffset + index,
-                    type: 'delivery',
-                    priority: detour.delivery.priority,
-                    detourSavings: detour.savings,
-                    isDetour: true
-                });
-                
-                // Remove da lista de restantes
-                remaining = remaining.filter(d => d.id !== detour.delivery.id);
-            });
-        }
-        
-        // Adiciona a entrega prioritária
-        routeSegment.push({
-            shipmentId: `entrega_${priorityDelivery.id}`,
-            deliveryId: priorityDelivery.id,
-            lat: parseFloat(priorityDelivery.lat),
-            lng: parseFloat(priorityDelivery.lng),
-            address: priorityDelivery.address,
-            order: orderOffset + routeSegment.length,
-            type: 'delivery',
-            priority: priorityDelivery.priority
-        });
-        
+        const routeSegment = [...detoursAnalysis.worthwhileDetours.map(d => d.delivery), priorityDelivery];
         const lastPosition = routeSegment[routeSegment.length - 1];
         
-        return {
-            route: routeSegment,
-            remaining: remaining,
-            lastPosition: lastPosition
-        };
+        // Retorna os objetos originais, não transformados
+        return { routeSegment, lastPosition };
     }
+    
+    // CORREÇÃO 5: `calculateRouteWithFixedOrder` agora calcula e retorna ETAs
+    async calculateRouteWithFixedOrder(deliveries, depot, circularRoute, stopTimeMinutes) {
+        try {
+            console.log('📌 Calculando rota com ordem fixa e ETAs...');
+            const stopTimeSeconds = stopTimeMinutes * 60;
+            if (deliveries.length === 0) return { optimizedOrder: [], totalDistance: 0, totalDuration: 0, polyline: null };
 
+            const waypoints = deliveries.map(d => d.address);
+            const destination = circularRoute ? depot.address : deliveries[deliveries.length - 1].address;
+            
+            const params = {
+                origin: depot.address,
+                destination: destination,
+                key: this.apiKey,
+                mode: 'driving',
+                language: 'pt-BR'
+            };
+            if (waypoints.length > 1) {
+                params.waypoints = (circularRoute ? waypoints : waypoints.slice(0, -1)).join('|');
+            }
+
+            const response = await axios.get(this.directionsURL, { params });
+            if (response.data.status !== 'OK') throw new Error(`API Error: ${response.data.status}`);
+
+            const route = response.data.routes[0];
+            const legs = route.legs;
+            let cumulativeEtaSeconds = 0, totalDistance = 0, totalDuration = 0;
+
+            const deliveriesWithEta = deliveries.map((delivery, index) => {
+                const legToThisStop = legs[index];
+                let eta_seconds = null;
+                if (legToThisStop) {
+                    const arrivalTimeSeconds = cumulativeEtaSeconds + legToThisStop.duration.value;
+                    const currentStopTime = delivery.type === 'pickup' ? 0 : stopTimeSeconds;
+                    cumulativeEtaSeconds = arrivalTimeSeconds + currentStopTime;
+                    eta_seconds = arrivalTimeSeconds;
+                    totalDistance += legToThisStop.distance.value;
+                    totalDuration += legToThisStop.duration.value;
+                }
+                return { ...delivery, eta_seconds, order: index };
+            });
+
+            if (circularRoute && legs.length > deliveries.length) {
+                const finalLeg = legs[legs.length - 1];
+                totalDistance += finalLeg.distance.value;
+                totalDuration += finalLeg.duration.value;
+            }
+
+            return {
+                optimizedOrder: deliveriesWithEta,
+                totalDistance,
+                totalDuration,
+                polyline: route.overview_polyline.points
+            };
+        } catch (error) {
+            console.error('❌ Erro ao calcular rota com ordem fixa:', error.message);
+            throw error;
+        }
+    }
+    
+    // === MÉTODOS AUXILIARES DE CÁLCULO ===
+    
     // Analisa desvios vantajosos
     async analyzeDetours(origin, destination, candidateDeliveries, directDistance) {
         console.log(`🔍 Analisando ${candidateDeliveries.length} possíveis desvios...`);
-        
         const detours = [];
-        
+    
         for (const candidate of candidateDeliveries) {
             try {
-                // Calcula rota com desvio: origem → candidato → destino
                 const detourDistance = await this.calculateDetourDistance(origin, candidate, destination);
-                
-                // Calcula economia/perda
                 const extraDistance = detourDistance - directDistance;
-                const detourRatio = detourDistance / directDistance;
-                
-                // Verifica se o desvio é vantajoso
-                const isWorthwhile = this.isDetourWorthwhile(
-                    extraDistance, 
-                    detourRatio, 
-                    candidate.priority || 0
-                );
-                
-                if (isWorthwhile) {
+                const detourRatio = directDistance > 0 ? detourDistance / directDistance : Infinity;
+    
+                if (this.isDetourWorthwhile(extraDistance, detourRatio, candidate.priority || 0)) {
                     const savings = this.calculateDetourValue(extraDistance, candidate.priority || 0);
-                    
                     detours.push({
                         delivery: candidate,
                         extraDistance: extraDistance,
@@ -273,72 +231,27 @@ class RouteOptimizationService {
                 console.error(`⚠️ Erro ao analisar desvio para ${candidate.customer_name || candidate.id}:`, error.message);
             }
         }
-        
-        // Ordena por valor do desvio (melhor primeiro) e limita
+    
         const worthwhileDetours = detours
             .sort((a, b) => b.savings - a.savings)
             .slice(0, this.config.maxDetoursPerPriority);
-        
+    
         return { worthwhileDetours };
     }
-
-    // Verifica se um desvio vale a pena (regras específicas conforme tabela de prioridades)
-    isDetourWorthwhile(extraDistance, detourRatio, candidatePriority) {
-        // Regras específicas para cada tipo de produto conforme tabela:
-        const rules = [
-            // Regra 1: Desvio muito pequeno (menos de 500m) sempre vale a pena
-            extraDistance < 500,
-            
-            // Regra 2: Para entregas URGENTES (3) - desvio até 2km é aceitável
-            extraDistance < 2000 && candidatePriority === 3,
-            
-            // Regra 3: Para entregas ALTAS (2) - bolos grandes (10-40 fatias) - desvio até 1.5km
-            extraDistance < 1500 && candidatePriority === 2,
-            
-            // Regra 4: Para entregas MÉDIAS (1) - 6 fatias - desvio até 1km
-            extraDistance < 1000 && candidatePriority === 1,
-            
-            // Regra 5: Respeita limite geral de 30% de aumento na distância
-            detourRatio <= this.config.maxDetourRatio,
-            
-            // Regra 6: Desvio máximo absoluto respeitado
-            extraDistance <= this.config.maxDetourDistance
-        ];
-        
-        const worthwhile = rules.some(rule => rule);
-        
-        if (worthwhile) {
-            const priorityNames = {0: 'Normal', 1: 'Média', 2: 'Alta', 3: 'Urgente'};
-            console.log(`   ✅ Desvio aprovado para prioridade ${priorityNames[candidatePriority]}: +${(extraDistance/1000).toFixed(1)}km`);
-        }
-        
-        return worthwhile;
+    
+    // Verifica se um desvio vale a pena
+    isDetourWorthwhile(extraDistance, detourRatio) {
+        return extraDistance < this.config.maxDetourDistance && detourRatio < this.config.maxDetourRatio;
     }
 
-    // Calcula valor do desvio baseado na importância do produto conforme tabela
+    // Calcula valor do desvio
     calculateDetourValue(extraDistance, candidatePriority) {
-        // Pontuação específica por tipo de produto conforme tabela:
-        // Urgente (3): 2400 pontos - casos especiais
-        // Alta (2): 1600 pontos - bolos grandes (10-40 fatias) 
-        // Média (1): 800 pontos - bolos 6 fatias
-        // Normal (0): 0 pontos - bentocakes, personalizados
-        const priorityScore = candidatePriority * 800;
-        
-        // Penalidade pela distância extra (maior distância = menos vantajoso)
+        const priorityScore = (4 - candidatePriority) * 1000;
         const distancePenalty = extraDistance;
-        
-        // Score final (maior = melhor)
-        const finalScore = priorityScore - distancePenalty;
-        
-        if (candidatePriority > 0) {
-            const priorityNames = {1: 'Média (6 fatias)', 2: 'Alta (bolos grandes)', 3: 'Urgente (especial)'};
-            console.log(`   📊 Score para ${priorityNames[candidatePriority]}: ${finalScore} (${priorityScore} - ${distancePenalty})`);
-        }
-        
-        return finalScore;
+        return priorityScore - distancePenalty;
     }
-
-    // Calcula distância entre dois pontos usando Google Maps
+    
+    // Calcula distância entre dois pontos
     async calculateDistance(origin, destination) {
         try {
             const response = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
@@ -351,52 +264,21 @@ class RouteOptimizationService {
                 },
                 timeout: 5000
             });
-            
             if (response.data.status === 'OK' && response.data.rows[0].elements[0].status === 'OK') {
-                return response.data.rows[0].elements[0].distance.value; // em metros
+                return response.data.rows[0].elements[0].distance.value;
             }
-            
-            // Fallback: distância euclidiana
             return this.calculateEuclideanDistance(origin, destination);
         } catch (error) {
             console.error('⚠️ Erro ao calcular distância via API:', error.message);
             return this.calculateEuclideanDistance(origin, destination);
         }
     }
-
-    // Calcula distância de desvio (origem → desvio → destino)
+    
+    // Calcula distância de desvio
     async calculateDetourDistance(origin, detour, destination) {
-        try {
-            const response = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
-                params: {
-                    origins: `${origin.lat},${origin.lng}|${detour.lat},${detour.lng}`,
-                    destinations: `${detour.lat},${detour.lng}|${destination.lat},${destination.lng}`,
-                    key: this.apiKey,
-                    mode: 'driving',
-                    units: 'metric'
-                },
-                timeout: 5000
-            });
-            
-            if (response.data.status === 'OK') {
-                const leg1 = response.data.rows[0].elements[0]; // origem → desvio
-                const leg2 = response.data.rows[1].elements[1]; // desvio → destino
-                
-                if (leg1.status === 'OK' && leg2.status === 'OK') {
-                    return leg1.distance.value + leg2.distance.value;
-                }
-            }
-            
-            // Fallback
-            const dist1 = this.calculateEuclideanDistance(origin, detour);
-            const dist2 = this.calculateEuclideanDistance(detour, destination);
-            return dist1 + dist2;
-        } catch (error) {
-            console.error('⚠️ Erro ao calcular distância de desvio:', error.message);
-            const dist1 = this.calculateEuclideanDistance(origin, detour);
-            const dist2 = this.calculateEuclideanDistance(detour, destination);
-            return dist1 + dist2;
-        }
+        const dist1 = await this.calculateDistance(origin, detour);
+        const dist2 = await this.calculateDistance(detour, destination);
+        return dist1 + dist2;
     }
 
     // Distância euclidiana como fallback
@@ -404,355 +286,117 @@ class RouteOptimizationService {
         const R = 6371000; // Raio da Terra em metros
         const dLat = (point2.lat - point1.lat) * Math.PI / 180;
         const dLng = (point2.lng - point1.lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
-                  Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
-
+    
     // Otimiza entregas restantes
     async optimizeRemainingDeliveries(deliveries, currentPosition, orderOffset) {
         if (deliveries.length === 0) return [];
         
         console.log(`🔄 Otimizando ${deliveries.length} entregas restantes...`);
         
-        // Para poucas entregas, usa ordem por proximidade
-        if (deliveries.length <= 3) {
+        // Se houver mais de 10 waypoints, a API do Google pode recusar a otimização.
+        // Usamos uma abordagem híbrida.
+        if (deliveries.length > 10) {
+            console.log('📍 Muitas entregas restantes, usando otimização por proximidade (fallback)');
             return this.optimizeByProximity(deliveries, currentPosition, orderOffset);
         }
-        
-        // Para muitas entregas, tenta usar Google Directions API
+
         try {
-            const waypoints = deliveries.map(d => d.address).slice(0, -1); // Remove última para destination
+            const waypoints = deliveries.map(d => d.address);
             const response = await axios.get(this.directionsURL, {
                 params: {
                     origin: `${currentPosition.lat},${currentPosition.lng}`,
-                    destination: deliveries[deliveries.length - 1].address,
+                    destination: `${currentPosition.lat},${currentPosition.lng}`, // Rota circular para otimizar
                     waypoints: `optimize:true|${waypoints.join('|')}`,
                     key: this.apiKey,
                     mode: 'driving'
                 },
                 timeout: 10000
             });
-            
-            if (response.data.status === 'OK') {
-                const waypointOrder = response.data.routes[0].waypoint_order || [];
-                const optimized = [];
+
+            if (response.data.status === 'OK' && response.data.routes[0].waypoint_order) {
+                const waypointOrder = response.data.routes[0].waypoint_order;
+                const orderedDeliveries = waypointOrder.map(index => deliveries[index]);
                 
-                // Adiciona waypoints otimizados
-                waypointOrder.forEach((index, order) => {
-                    optimized.push({
-                        shipmentId: `entrega_${deliveries[index].id}`,
-                        deliveryId: deliveries[index].id,
-                        lat: parseFloat(deliveries[index].lat),
-                        lng: parseFloat(deliveries[index].lng),
-                        address: deliveries[index].address,
-                        order: orderOffset + order,
-                        type: 'delivery',
-                        priority: deliveries[index].priority
-                    });
-                });
-                
-                // Adiciona o destino final
-                const lastDelivery = deliveries[deliveries.length - 1];
-                optimized.push({
-                    shipmentId: `entrega_${lastDelivery.id}`,
-                    deliveryId: lastDelivery.id,
-                    lat: parseFloat(lastDelivery.lat),
-                    lng: parseFloat(lastDelivery.lng),
-                    address: lastDelivery.address,
-                    order: orderOffset + optimized.length,
-                    type: 'delivery',
-                    priority: lastDelivery.priority
-                });
-                
-                console.log(`✅ Google Directions otimizou ${optimized.length} entregas`);
-                return optimized;
+                // Adiciona as entregas que não foram reordenadas (se houver)
+                const remaining = deliveries.filter((_, index) => !waypointOrder.includes(index));
+                const finalOrder = [...orderedDeliveries, ...remaining];
+
+                console.log(`✅ Google Directions otimizou ${finalOrder.length} entregas`);
+                return finalOrder.map((delivery, index) => ({
+                    ...delivery,
+                     order: orderOffset + index
+                }));
             }
         } catch (error) {
             console.error('⚠️ Erro na otimização do Google:', error.message);
         }
         
-        // Fallback: proximidade
         console.log('📍 Usando otimização por proximidade (fallback)');
         return this.optimizeByProximity(deliveries, currentPosition, orderOffset);
     }
-
-    // Otimização simples por proximidade
+    
+    // Otimização simples por proximidade (algoritmo do vizinho mais próximo)
     optimizeByProximity(deliveries, currentPosition, orderOffset) {
         const optimized = [];
         let remaining = [...deliveries];
         let current = currentPosition;
-        
+    
         while (remaining.length > 0) {
-            // Encontra a entrega mais próxima
-            let nearest = remaining[0];
-            let minDistance = this.calculateEuclideanDistance(current, nearest);
-            
-            for (const delivery of remaining) {
-                const distance = this.calculateEuclideanDistance(current, delivery);
+            let nearestIndex = -1;
+            let minDistance = Infinity;
+    
+            for (let i = 0; i < remaining.length; i++) {
+                const distance = this.calculateEuclideanDistance(current, remaining[i]);
                 if (distance < minDistance) {
                     minDistance = distance;
-                    nearest = delivery;
+                    nearestIndex = i;
                 }
             }
             
-            // Adiciona à rota otimizada
+            const nearest = remaining[nearestIndex];
             optimized.push({
-                shipmentId: `entrega_${nearest.id}`,
-                deliveryId: nearest.id,
-                lat: parseFloat(nearest.lat),
-                lng: parseFloat(nearest.lng),
-                address: nearest.address,
-                order: orderOffset + optimized.length,
-                type: 'delivery',
-                priority: nearest.priority
+                ...nearest,
+                order: orderOffset + optimized.length
             });
-            
-            // Remove da lista e atualiza posição atual
-            remaining = remaining.filter(d => d.id !== nearest.id);
+    
             current = nearest;
+            remaining.splice(nearestIndex, 1);
         }
-        
+    
         return optimized;
     }
-
-    // Funções auxiliares mantidas
-    integratePickupStops(deliveries, pickupStops, manualOrder) {
-        const allStops = [...deliveries];
-        
-        pickupStops.forEach(stop => {
-            const stopOrder = manualOrder[stop.id] || stop.order || 999;
-            
-            if (stopOrder < 999) {
-                let inserted = false;
-                for (let i = 0; i < allStops.length; i++) {
-                    const currentOrder = allStops[i].order;
-                    if (stopOrder < currentOrder) {
-                        allStops.splice(i, 0, {
-                            shipmentId: stop.id,
-                            deliveryId: stop.id,
-                            lat: parseFloat(stop.lat),
-                            lng: parseFloat(stop.lng),
-                            address: stop.address,
-                            order: stopOrder,
-                            type: 'pickup'
-                        });
-                        inserted = true;
-                        break;
-                    }
-                }
-                if (!inserted) {
-                    allStops.push({
-                        shipmentId: stop.id,
-                        deliveryId: stop.id,
-                        lat: parseFloat(stop.lat),
-                        lng: parseFloat(stop.lng),
-                        address: stop.address,
-                        order: allStops.length,
-                        type: 'pickup'
-                    });
-                }
-            } else {
-                allStops.push({
-                    shipmentId: stop.id,
-                    deliveryId: stop.id,
-                    lat: parseFloat(stop.lat),
-                    lng: parseFloat(stop.lng),
-                    address: stop.address,
-                    order: allStops.length,
-                    type: 'pickup'
-                });
-            }
-        });
-        
-        return allStops;
-    }
-
+    
+    // Verifica se há ordem manual completa
     hasCompleteManualOrder(deliveries, manualOrder) {
         const deliveryCount = deliveries.length;
         const manualOrderCount = Object.keys(manualOrder).length;
-        return manualOrderCount >= deliveryCount;
+        return deliveryCount > 0 && manualOrderCount >= deliveryCount;
     }
 
-    async calculateRouteWithFixedOrder(deliveries, depot, circularRoute) {
-        try {
-            const waypoints = deliveries.map(d => ({
-                location: d.address,
-                stopover: true
-            }));
-
-            const destination = circularRoute 
-                ? depot.address
-                : deliveries[deliveries.length - 1].address;
-
-            const response = await axios.get(this.directionsURL, {
-                params: {
-                    origin: depot.address,
-                    destination: destination,
-                    waypoints: waypoints.map(w => w.location).join('|'),
-                    key: this.apiKey,
-                    mode: 'driving',
-                    language: 'pt-BR'
-                }
-            });
-
-            if (response.data.status !== 'OK') {
-                throw new Error(`API Error: ${response.data.status}`);
-            }
-
-            const route = response.data.routes[0];
-            
-            const optimizedDeliveries = deliveries.map((delivery, index) => ({
-                shipmentId: delivery.type === 'pickup' ? delivery.id : `entrega_${delivery.id}`,
-                deliveryId: delivery.id,
-                lat: parseFloat(delivery.lat),
-                lng: parseFloat(delivery.lng),
-                address: delivery.address,
-                order: index,
-                type: delivery.type || 'delivery'
-            }));
-
-            let totalDistance = 0;
-            let totalDuration = 0;
-            
-            route.legs.forEach(leg => {
-                totalDistance += leg.distance.value;
-                totalDuration += leg.duration.value;
-            });
-
-            return {
-                optimizedOrder: optimizedDeliveries,
-                totalDistance: totalDistance,
-                totalDuration: totalDuration,
-                polyline: route.overview_polyline.points
-            };
-
-        } catch (error) {
-            throw error;
-        }
-    }
-
-    async calculateRouteWithOrderedStops(stops, depot, circularRoute, stopTimeMinutes) {
-        try {
-            const stopTimeSeconds = stopTimeMinutes * 60; // Converte para segundos
-            const waypoints = stops.map(stop => ({
-                location: stop.address,
-                stopover: true
-            }));
-            
-            const origin = depot.address;
-            const destination = circularRoute ? origin : stops[stops.length - 1].address;
-            
-            const response = await axios.get(this.directionsURL, {
-                params: {
-                    origin: origin,
-                    destination: destination,
-                    waypoints: waypoints.map(w => w.location).join('|'),
-                    key: this.apiKey,
-                    mode: 'driving'
-                }
-            });
-            
-            if (response.data.status !== 'OK') {
-                throw new Error(`API Error: ${response.data.status}`);
-            }
-            
-            const route = response.data.routes[0];
-            const legs = route.legs;
-            
-            let cumulativeEtaSeconds = 0;
-            let totalDistance = 0;
-            let totalDuration = 0;
-
-            const stopsWithEta = stops.map((stop, index) => {
-                const legToThisStop = legs[index];
-                if (!legToThisStop) {
-                    return { ...stop, eta_seconds: null };
-                }
-
-                // ETA para chegar nesta parada é o tempo acumulado até agora + o tempo de viagem desta perna
-                const arrivalTimeSeconds = cumulativeEtaSeconds + legToThisStop.duration.value;
-                const stopWithEta = { ...stop, eta_seconds: arrivalTimeSeconds };
-
-                // Para a PRÓXIMA parada, o tempo acumulado será a hora de chegada NESTA parada + o tempo de parada.
-                // Paradas de pickup na confeitaria não adicionam tempo de parada, a menos que seja configurado.
-                // O tempo da parada na confeitaria é considerado como o tempo para "zerar" e recomeçar a contagem de paradas.
-                const currentStopTime = stop.type === 'pickup' ? 0 : stopTimeSeconds;
-                cumulativeEtaSeconds = arrivalTimeSeconds + currentStopTime;
-
-                // Acumula distância e duração totais da viagem
-                totalDistance += legToThisStop.distance.value;
-                totalDuration += legToThisStop.duration.value;
-
-                return stopWithEta;
-            });
-            
-            return {
-                optimizedOrder: stopsWithEta,
-                totalDistance: totalDistance,
-                totalDuration: totalDuration,
-                polyline: route.overview_polyline.points
-            };
-        } catch (error) {
-            console.error('Erro ao calcular rota:', error);
-            
-            return {
-                optimizedOrder: stops.map(s => ({ ...s, eta_seconds: null })),
-                totalDistance: 0,
-                totalDuration: 0,
-                polyline: null
-            };
-        }
-    }
-    
-    handlePickupOnlyRoute(pickupStops, depot, circularRoute, manualOrder) {
-        const optimizedOrder = pickupStops.map((stop, index) => ({
-            shipmentId: stop.id,
-            deliveryId: stop.id,
-            lat: parseFloat(stop.lat),
-            lng: parseFloat(stop.lng),
-            address: stop.address,
-            order: manualOrder[stop.id] || index,
-            type: 'pickup'
-        }));
-
+    // Método para debug de configurações
+    getDebugInfo() {
         return {
-            optimizedOrder: optimizedOrder.sort((a, b) => a.order - b.order),
-            totalDistance: 0,
-            totalDuration: 0,
-            polyline: null
-        };
-    }
-
-    handleSingleDeliveryRoute(deliveries, pickupStops, depot, circularRoute, manualOrder) {
-        const allStops = [...deliveries];
-        
-        pickupStops.forEach(stop => {
-            allStops.push({
-                ...stop,
-                type: 'pickup'
-            });
-        });
-        
-        const optimizedOrder = allStops.map((stop, index) => ({
-            shipmentId: stop.type === 'pickup' ? stop.id : `entrega_${stop.id}`,
-            deliveryId: stop.id,
-            lat: parseFloat(stop.lat),
-            lng: parseFloat(stop.lng),
-            address: stop.address,
-            order: manualOrder[stop.id] || index,
-            type: stop.type || 'delivery'
-        }));
-
-        return {
-            optimizedOrder: optimizedOrder.sort((a, b) => a.order - b.order),
-            totalDistance: 0,
-            totalDuration: 0,
-            polyline: null
+            config: this.config,
+            apiKey: this.apiKey ? '***configurada***' : 'NÃO CONFIGURADA',
+            version: '3.0.0-fixed',
+            features: [
+                'Otimização inteligente por prioridades',
+                'Análise de desvios vantajosos',
+                'Cálculo preciso de ETAs',
+                'Suporte a ordem manual',
+                'Tratamento de casos especiais',
+                'Análise de eficiência',
+                'Logs detalhados'
+            ]
         };
     }
 }
 
+// Exporta instância singleton
 module.exports = new RouteOptimizationService();

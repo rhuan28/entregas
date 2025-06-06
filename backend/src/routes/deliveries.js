@@ -563,20 +563,16 @@ async function checkColumnExists(tableName, columnName) {
 }
 
 // Otimiza rota com ordem manual e paradas - VERSÃO ATUALIZADA
+// Otimiza rota com ordem manual e paradas - VERSÃO CORRIGIDA E ROBUSTA
 router.post('/optimize', async (req, res) => {
     try {
         const { date, manualOrder, pickupStops } = req.body;
         const routeDate = date || new Date().toISOString().split('T')[0];
-        
-        console.log('Recebendo solicitação de otimização:', {
-            date: routeDate,
-            manualOrder: manualOrder,
-            pickupStops: pickupStops
-        });
-        
         const db = getDb(req);
         
-        // Busca configurações
+        console.log('Recebendo solicitação de otimização para a data:', routeDate);
+
+        // Busca configurações primeiro
         const settingsResult = await db.query(
             'SELECT * FROM settings WHERE setting_key IN ($1, $2, $3)',
             ['circular_route', 'origin_address', 'stop_time']
@@ -586,60 +582,25 @@ router.post('/optimize', async (req, res) => {
         settingsResult.rows.forEach(row => {
             settings[row.setting_key] = row.setting_value;
         });
-
-        // Adiciona a leitura do tempo de parada
+        const circularRoute = settings.circular_route === 'true';
+        const originAddress = settings.origin_address || CONFEITARIA_ADDRESS.address;
         const stopTimeMinutes = parseInt(settings.stop_time, 10) || 8;
-        
-        // Busca todas as entregas do dia ordenadas por nova escala de prioridade
-        const deliveries = await db.query(
+
+        // Busca as entregas do dia que precisam ser otimizadas
+        const deliveriesResult = await db.query(
             'SELECT * FROM deliveries WHERE order_date = $1 AND status IN ($2, $3) ORDER BY priority DESC, id ASC',
             [routeDate, 'pending', 'optimized']
         );
-        
-        if (deliveries.rows.length === 0) {
-            return res.json({ message: 'Nenhuma entrega disponível para otimização' });
+
+        if (deliveriesResult.rows.length === 0 && (!pickupStops || pickupStops.length === 0)) {
+            return res.status(404).json({ message: 'Nenhuma entrega ou parada disponível para otimização.' });
         }
         
-        // Log das prioridades encontradas
-        const priorityStats = deliveries.rows.reduce((acc, delivery) => {
-            const priority = delivery.priority || 0;
-            acc[priority] = (acc[priority] || 0) + 1;
-            return acc;
-        }, {});
-        
-        console.log('Distribuição de prioridades:', Object.entries(priorityStats).map(([p, count]) => 
-            `${count} ${getPriorityLabel(parseInt(p))}`
-        ).join(', '));
-        
-        // Define se a rota é circular
-        const circularRoute = settings.circular_route === 'true';
-        
-        // Define endereço de origem
-        const originAddress = settings.origin_address || CONFEITARIA_ADDRESS.address;
-        let depot = {
-            ...CONFEITARIA_ADDRESS,
-            address: originAddress
-        };
-        
-        if (originAddress !== CONFEITARIA_ADDRESS.address) {
-            try {
-                const coords = await googleMaps.geocodeAddress(originAddress);
-                depot = {
-                    address: originAddress,
-                    lat: coords.lat,
-                    lng: coords.lng
-                };
-            } catch (error) {
-                console.error('Erro ao geocodificar endereço de origem:', error);
-            }
-        }
-        
-        // Adiciona paradas na confeitaria se solicitado
-        let allStops = [...deliveries.rows];
-        
+        let allStops = [...deliveriesResult.rows];
+        let depot = { ...CONFEITARIA_ADDRESS, address: originAddress };
+
+        // Adiciona as paradas na confeitaria, se houver
         if (pickupStops && pickupStops.length > 0) {
-            console.log('Adicionando paradas na confeitaria:', pickupStops);
-            
             pickupStops.forEach(stop => {
                 allStops.push({
                     id: stop.id,
@@ -653,87 +614,63 @@ router.post('/optimize', async (req, res) => {
             });
         }
         
-        // Volta todas as entregas otimizadas para pendente temporariamente
-        await db.query(
-            'UPDATE deliveries SET status = $1 WHERE order_date = $2 AND status = $3',
-            ['pending', routeDate, 'optimized']
-        );
-        
-        // Otimiza a rota usando a nova escala de prioridades e passando o tempo de parada
+        // Otimiza a rota
         const optimizedRoute = await routeOptimization.optimizeRoute(allStops, depot, circularRoute, manualOrder, stopTimeMinutes);
-                
-        // Prepara dados da rota para salvar
+
+        // Prepara os dados para salvar no banco
         const routeData = {
             route_date: routeDate,
             total_distance: optimizedRoute.totalDistance,
             total_duration: optimizedRoute.totalDuration,
             optimized_order: JSON.stringify(optimizedRoute.optimizedOrder),
             route_config: JSON.stringify({
-                circularRoute: circularRoute,
-                originAddress: originAddress,
-                manualOrder: manualOrder,
-                pickupStops: pickupStops,
-                priorityStats: priorityStats,
-                optimizedAt: new Date().toISOString(),
-                totalDeliveries: deliveries.rows.length,
-                totalStops: allStops.length
+                circularRoute,
+                originAddress,
+                manualOrder,
+                pickupStops
             }),
             status: 'planned'
         };
-        
-        let routeId;
-        
-        // Atualiza ou cria rota
-        if (existingRoutes.rows.length > 0) {
-            // Atualiza rota existente
-            await db.query(
-                'UPDATE routes SET total_distance = $1, total_duration = $2, optimized_order = $3, route_config = $4, status = $5 WHERE id = $6',
-                [
-                    routeData.total_distance, 
-                    routeData.total_duration, 
-                    routeData.optimized_order, 
-                    routeData.route_config,
-                    routeData.status,
-                    existingRoutes.rows[0].id
-                ]
-            );
-            routeId = existingRoutes.rows[0].id;
-            console.log(`Rota existente atualizada (ID: ${routeId}) com configurações completas`);
-        } else {
-            // Cria nova rota
-            const routeResult = await db.query(
-                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order, route_config, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-                [
-                    routeData.route_date,
-                    routeData.total_distance, 
-                    routeData.total_duration, 
-                    routeData.optimized_order,
-                    routeData.route_config,
-                    routeData.status
-                ]
-            );
-            routeId = routeResult.rows[0].id;
-            console.log(`Nova rota criada (ID: ${routeId}) com configurações completas`);
-        }
-        
-        // Atualiza status de todas as entregas incluídas para "optimized"
-        await db.query(
-            'UPDATE deliveries SET status = $1 WHERE order_date = $2 AND status = $3',
-            ['optimized', routeDate, 'pending']
+
+        // Verifica se já existe uma rota para esta data para decidir entre INSERT e UPDATE
+        const existingRoutes = await db.query(
+            'SELECT id FROM routes WHERE route_date = $1',
+            [routeDate]
         );
-        
-        console.log(`✅ Rota otimizada salva permanentemente com ${deliveries.rows.length} entregas e ${allStops.length} paradas total`);
+
+        let routeId;
+        if (existingRoutes.rows.length > 0) {
+            routeId = existingRoutes.rows[0].id;
+            await db.query(
+                'UPDATE routes SET total_distance = $1, total_duration = $2, optimized_order = $3, route_config = $4, status = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6',
+                [routeData.total_distance, routeData.total_duration, routeData.optimized_order, routeData.route_config, routeData.status, routeId]
+            );
+            console.log(`Rota existente (ID: ${routeId}) atualizada.`);
+        } else {
+            const newRouteResult = await db.query(
+                'INSERT INTO routes (route_date, total_distance, total_duration, optimized_order, route_config, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                [routeData.route_date, routeData.total_distance, routeData.total_duration, routeData.optimized_order, routeData.route_config, routeData.status]
+            );
+            routeId = newRouteResult.rows[0].id;
+            console.log(`Nova rota criada (ID: ${routeId}).`);
+        }
+
+        // Atualiza o status das entregas para 'optimized'
+        if (deliveriesResult.rows.length > 0) {
+            const deliveryIds = deliveriesResult.rows.map(d => d.id);
+            await db.query(
+                'UPDATE deliveries SET status = $1 WHERE id = ANY($2::int[])',
+                ['optimized', deliveryIds]
+            );
+        }
+
+        console.log(`✅ Rota (ID: ${routeId}) otimizada com sucesso.`);
         
         res.json({
             routeId: routeId,
-            saved: true,
-            ...optimizedRoute,
-            circularRoute: circularRoute,
-            originAddress: originAddress,
-            totalDeliveries: deliveries.rows.length,
-            totalStops: allStops.length,
-            priorityStats: priorityStats
+            ...optimizedRoute
         });
+
     } catch (error) {
         console.error('Erro na otimização:', error);
         res.status(500).json({ error: error.message });
