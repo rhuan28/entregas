@@ -13,6 +13,8 @@ let deliveryData = [];
 let pickupStops = [];
 let manualOrder = {};
 let isRouteAlreadyOptimized = false;
+let autoScrollInterval = null;
+let lastMouseY = 0;
 
 const PRODUCT_CONFIG = {
     'bentocake': { name: 'Bentocake', priority: 0, size: 'P', description: 'Bentocake individual', color: '#28a745' },
@@ -627,7 +629,6 @@ function renderDeliveryItemContent(item, index) {
         if (optimizedStop) {
             const times = [];
             
-            // Tempo de chegada (ETA)
             if (typeof optimizedStop.eta_seconds === 'number') {
                 const totalMinutes = Math.round(optimizedStop.eta_seconds / 60);
                 const arrivalTime = new Date(new Date().getTime() + optimizedStop.eta_seconds * 1000);
@@ -642,7 +643,6 @@ function renderDeliveryItemContent(item, index) {
                 `);
             }
 
-            // Tempo no veículo (só para entregas)
             if (item.type !== 'pickup' && typeof optimizedStop.vehicle_time_seconds === 'number') {
                 const vehicleMinutes = Math.round(optimizedStop.vehicle_time_seconds / 60);
                 times.push(`
@@ -660,20 +660,46 @@ function renderDeliveryItemContent(item, index) {
         }
     }
 
+    // Obter ordem atual e posição para controlar botões
+    const allDisplayItems = [...deliveryData.map(d => ({ ...d, type: 'delivery' })), ...pickupStops];
+    const sortedItems = allDisplayItems.sort((a, b) => {
+        const orderA = manualOrder[a.id] || 999;
+        const orderB = manualOrder[b.id] || 999;
+        return orderA - orderB;
+    });
+    
+    const currentItemIndex = sortedItems.findIndex(sortedItem => sortedItem.id === item.id);
+    const isFirst = currentItemIndex === 0;
+    const isLast = currentItemIndex === sortedItems.length - 1;
+    const currentOrder = manualOrder[item.id] || (index + 1);
+
     if (item.type === 'pickup') {
         return `
             <div class="delivery-header">
-                <h3>🏪 ${item.customer_name || 'Parada na Confeitaria'}</h3>
-                <span class="priority priority-0">🏪 Parada</span>
+                <div class="delivery-info">
+                    <h3>🏪 ${item.customer_name || 'Parada na Confeitaria'}</h3>
+                    <span class="priority priority-0">🏪 Parada</span>
+                </div>
+                <div class="order-control">
+                    <div class="order-number">${currentOrder}</div>
+                    <div class="order-buttons">
+                        <button class="order-btn order-up" 
+                                onclick="moveDelivery('${item.id}', 'up')"
+                                ${isFirst ? 'disabled' : ''}>
+                            ▲
+                        </button>
+                        <button class="order-btn order-down" 
+                                onclick="moveDelivery('${item.id}', 'down')"
+                                ${isLast ? 'disabled' : ''}>
+                            ▼
+                        </button>
+                    </div>
+                </div>
             </div>
             <p><strong>📍</strong> ${item.address || confeitariaLocation.address}</p>
             <p><strong>📦</strong> ${item.product_description || 'Recarregar produtos'}</p>
             ${timesHtml}
             <div class="delivery-actions">
-                <div class="manual-order">
-                    <label>Ordem:</label>
-                    <input type="number" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)">
-                </div>
                 <button onclick="showDeliveryOnMap(${parseFloat(item.lat || confeitariaLocation.lat)}, ${parseFloat(item.lng || confeitariaLocation.lng)})" class="btn btn-secondary btn-sm">🗺️</button>
                 <button onclick="deleteDelivery('${item.id}', 'pickup', 'pickup')" class="btn btn-danger btn-sm">🗑️</button>
             </div>
@@ -686,10 +712,27 @@ function renderDeliveryItemContent(item, index) {
 
         return `
             <div class="delivery-header">
-                <h3>${item.customer_name} ${productDisplay}</h3>
-                <span class="priority priority-${getPriorityClass(item.priority)}">
-                    ${priorityEmoji} ${getPriorityLabel(item.priority)}
-                </span>
+                <div class="delivery-info">
+                    <h3>${item.customer_name} ${productDisplay}</h3>
+                    <span class="priority priority-${getPriorityClass(item.priority)}">
+                        ${priorityEmoji} ${getPriorityLabel(item.priority)}
+                    </span>
+                </div>
+                <div class="order-control">
+                    <div class="order-number">${currentOrder}</div>
+                    <div class="order-buttons">
+                        <button class="order-btn order-up" 
+                                onclick="moveDelivery('${item.id}', 'up')"
+                                ${isFirst ? 'disabled' : ''}>
+                            ▲
+                        </button>
+                        <button class="order-btn order-down" 
+                                onclick="moveDelivery('${item.id}', 'down')"
+                                ${isLast ? 'disabled' : ''}>
+                            ▼
+                        </button>
+                    </div>
+                </div>
             </div>
             ${orderNumberDisplay}
             <p><strong>📍</strong> ${item.address}</p>
@@ -697,10 +740,6 @@ function renderDeliveryItemContent(item, index) {
             ${item.customer_phone ? `<p><strong>📞</strong> ${item.customer_phone}</p>` : ''}
             ${timesHtml}
             <div class="delivery-actions">
-                <div class="manual-order">
-                    <label>Ordem:</label>
-                    <input type="number" class="order-input" value="${manualOrder[item.id] || ''}" min="1" onchange="updateManualOrder('${item.id}', this.value)">
-                </div>
                 <button onclick="editDelivery('${item.id}')" class="btn btn-secondary btn-sm">✏️</button>
                 <button onclick="showDeliveryOnMap(${parseFloat(item.lat)}, ${parseFloat(item.lng)})" class="btn btn-secondary btn-sm">🗺️</button>
                 <button onclick="generateTrackingLink('${item.id}')" class="btn btn-info btn-sm">🔗</button>
@@ -957,56 +996,150 @@ function shareRoute() {
 let draggedElement = null;
 function handleDragStart(e) {
     draggedElement = this;
-    this.style.opacity = '0.5';
+    this.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', this.innerHTML);
+    startAutoScroll();
 }
+
 function handleDragEnd(e) {
-    this.style.opacity = '1';
-    document.querySelectorAll('.delivery-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+    if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+    }
+    document.querySelectorAll('.delivery-item.drag-over')
+        .forEach(el => el.classList.remove('drag-over'));
     draggedElement = null;
+    stopAutoScroll();
 }
+
 function handleDragOver(e) {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
     if (this !== draggedElement) {
         this.classList.add('drag-over');
     }
-    e.dataTransfer.dropEffect = 'move';
+    
+    lastMouseY = e.clientY;
 }
+
 function handleDragLeave(e) {
     this.classList.remove('drag-over');
 }
+
 function handleDrop(e) {
     e.preventDefault();
     e.stopPropagation();
+    
     this.classList.remove('drag-over');
+    
     if (draggedElement && draggedElement !== this) {
-        const list = document.getElementById('deliveries-list');
-        const targetIndex = Array.from(list.children).indexOf(this);
-        const draggedIndex = Array.from(list.children).indexOf(draggedElement);
+        const container = document.getElementById('deliveries-list');
+        const items = Array.from(container.children);
+        const draggedIndex = items.indexOf(draggedElement);
+        const targetIndex = items.indexOf(this);
+        
         if (draggedIndex < targetIndex) {
-            list.insertBefore(draggedElement, this.nextSibling);
+            container.insertBefore(draggedElement, this.nextSibling);
         } else {
-            list.insertBefore(draggedElement, this);
+            container.insertBefore(draggedElement, this);
         }
+        
         updateManualOrderFromDOM();
     }
 }
+
 function updateManualOrderFromDOM() {
-    const newManualOrder = {};
     const items = document.querySelectorAll('#deliveries-list .delivery-item');
-    items.forEach((itemElement, index) => {
-        const itemId = itemElement.dataset.itemId;
+    items.forEach((item, index) => {
+        const itemId = item.dataset.itemId;
         if (itemId) {
-            newManualOrder[itemId] = index + 1;
-            const input = itemElement.querySelector(`#order-input-${itemId}`);
-            if (input) {
-                input.value = index + 1;
-            }
+            manualOrder[itemId] = index + 1;
         }
     });
-    manualOrder = newManualOrder;
     console.log("Ordem manual atualizada pelo DOM:", manualOrder);
+    
+    setTimeout(() => {
+        renderDeliveriesList();
+    }, 100);
+}
+
+function moveDelivery(deliveryId, direction) {
+    const currentOrder = manualOrder[deliveryId];
+    if (!currentOrder) return;
+
+    const allOrders = Object.values(manualOrder).sort((a, b) => a - b);
+    const currentIndex = allOrders.indexOf(currentOrder);
+
+    let newOrder;
+    if (direction === 'up' && currentIndex > 0) {
+        newOrder = allOrders[currentIndex - 1] - 0.5;
+    } else if (direction === 'down' && currentIndex < allOrders.length - 1) {
+        newOrder = allOrders[currentIndex + 1] + 0.5;
+    } else {
+        return;
+    }
+
+    manualOrder[deliveryId] = newOrder;
+    reorderAllDeliveries();
+    renderDeliveriesList();
+}
+
+function reorderAllDeliveries() {
+    const sortedIds = Object.keys(manualOrder).sort((a, b) => 
+        manualOrder[a] - manualOrder[b]
+    );
+    
+    sortedIds.forEach((id, index) => {
+        manualOrder[id] = index + 1;
+    });
+}
+
+function startAutoScroll() {
+    const scrollSpeed = 5;
+    const scrollThreshold = 100;
+    
+    autoScrollInterval = setInterval(() => {
+        const mouseY = lastMouseY;
+        const windowHeight = window.innerHeight;
+        
+        if (mouseY < scrollThreshold) {
+            window.scrollBy(0, -scrollSpeed);
+            showScrollIndicator('⬆️ Auto-scroll...');
+        } else if (mouseY > windowHeight - scrollThreshold) {
+            window.scrollBy(0, scrollSpeed);
+            showScrollIndicator('⬇️ Auto-scroll...');
+        } else {
+            hideScrollIndicator();
+        }
+    }, 16);
+}
+
+function stopAutoScroll() {
+    if (autoScrollInterval) {
+        clearInterval(autoScrollInterval);
+        autoScrollInterval = null;
+    }
+    hideScrollIndicator();
+}
+
+function showScrollIndicator(text) {
+    let indicator = document.getElementById('scroll-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'scroll-indicator';
+        indicator.className = 'scroll-indicator';
+        document.body.appendChild(indicator);
+    }
+    indicator.textContent = text;
+    indicator.classList.add('show');
+}
+
+function hideScrollIndicator() {
+    const indicator = document.getElementById('scroll-indicator');
+    if (indicator) {
+        indicator.classList.remove('show');
+    }
 }
 
 // --- Configurações ---
@@ -1274,6 +1407,10 @@ window.onload = async () => {
     } else {
         console.warn("Socket.IO não inicializado.");
     }
+
+    document.addEventListener('dragover', (e) => {
+    lastMouseY = e.clientY;
+});
 };
 
 // --- Otimização de Rota ---
@@ -1429,3 +1566,5 @@ window.addPickupStop = addPickupStop;
 window.removePickupStop = removePickupStop;
 window.showOptimizedRoute = showOptimizedRoute;
 window.updateManualOrder = updateManualOrder;
+window.moveDelivery = moveDelivery;
+window.reorderAllDeliveries = reorderAllDeliveries;
