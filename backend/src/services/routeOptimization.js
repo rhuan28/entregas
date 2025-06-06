@@ -65,12 +65,25 @@ class RouteOptimizationService {
 
     // NOVA OTIMIZAÇÃO INTELIGENTE APRIMORADA
     async enhancedIntelligentOptimization(deliveries, depot) {
+        // Remover duplicatas logo no início
+        const uniqueDeliveries = [];
+        const seenIds = new Set();
+        
+        deliveries.forEach(delivery => {
+            if (!seenIds.has(delivery.id)) {
+                seenIds.add(delivery.id);
+                uniqueDeliveries.push(delivery);
+            }
+        });
+
+        console.log(`🔧 Entregas originais: ${deliveries.length}, Únicas: ${uniqueDeliveries.length}`);
+
         const priorityGroups = { 3: [], 2: [], 1: [], 0: [] };
-        deliveries.forEach(d => (priorityGroups[d.priority || 0] || priorityGroups[0]).push(d));
+        uniqueDeliveries.forEach(d => (priorityGroups[d.priority || 0] || priorityGroups[0]).push(d));
 
         let finalRoute = [];
         let lastPosition = depot;
-        let remainingDeliveries = [...deliveries];
+        let remainingDeliveries = [...uniqueDeliveries];
 
         // Processa cada nível de prioridade
         for (const priority of [3, 2, 1, 0]) {
@@ -79,7 +92,6 @@ class RouteOptimizationService {
 
             console.log(`- Processando ${stopsInGroup.length} paradas de prioridade ${priority}...`);
             
-            // Otimiza grupo atual considerando desvios inteligentes
             const optimizedGroup = await this.optimizeGroupWithSmartDetours(
                 stopsInGroup, 
                 lastPosition, 
@@ -87,14 +99,11 @@ class RouteOptimizationService {
                 priority
             );
             
-            // Adiciona ao resultado final
             finalRoute.push(...optimizedGroup);
             
-            // Remove entregas processadas da lista de restantes
             const processedIds = new Set(optimizedGroup.map(d => d.id));
             remainingDeliveries = remainingDeliveries.filter(d => !processedIds.has(d.id));
             
-            // Atualiza posição atual
             if (optimizedGroup.length > 0) {
                 lastPosition = optimizedGroup[optimizedGroup.length - 1];
             }
@@ -316,9 +325,27 @@ class RouteOptimizationService {
     // Método para calcular detalhes da rota (mantido do original)
     async calculateRouteDetails(stops, depot, circularRoute, stopTimeMinutes) {
         try {
-            if (stops.length === 0) return { optimizedOrder: [], totalDistance: 0, totalDuration: 0, polyline: null };
+            if (stops.length === 0) {
+                return { optimizedOrder: [], totalDistance: 0, totalDuration: 0, polyline: null };
+            }
 
-            const waypoints = stops.map(s => s.address);
+            // 🔧 CORREÇÃO 1: Remover duplicatas baseado no ID
+            const uniqueStops = [];
+            const seenIds = new Set();
+            
+            stops.forEach(stop => {
+                const stopId = stop.id || stop.deliveryId;
+                if (!seenIds.has(stopId)) {
+                    seenIds.add(stopId);
+                    uniqueStops.push(stop);
+                } else {
+                    console.log(`⚠️ Duplicata removida no backend: ID ${stopId}`);
+                }
+            });
+
+            console.log(`🔧 Stops originais: ${stops.length}, Únicos: ${uniqueStops.length}`);
+
+            const waypoints = uniqueStops.map(s => s.address);
             const params = {
                 origin: depot.address,
                 destination: circularRoute ? depot.address : waypoints[waypoints.length - 1],
@@ -331,7 +358,9 @@ class RouteOptimizationService {
             }
 
             const response = await axios.get(this.directionsURL, { params });
-            if (response.data.status !== 'OK') throw new Error(`API do Google Maps: ${response.data.status}`);
+            if (response.data.status !== 'OK') {
+                throw new Error(`API do Google Maps: ${response.data.status}`);
+            }
 
             const route = response.data.routes[0];
             const legs = route.legs;
@@ -342,7 +371,8 @@ class RouteOptimizationService {
             let totalDuration = 0;
             const stopTimeSeconds = stopTimeMinutes * 60;
 
-            const stopsWithDetails = stops.map((stop, index) => {
+            // 🔧 CORREÇÃO 2: Processar apenas stops únicos
+            const stopsWithDetails = uniqueStops.map((stop, index) => {
                 const leg = legs[index];
                 if (!leg) return { ...stop, eta_seconds: null, vehicle_time_seconds: null };
                 
@@ -359,8 +389,13 @@ class RouteOptimizationService {
                 
                 const stopWithDetails = {
                     ...stop,
+                    // 🔧 CORREÇÃO 3: Garantir IDs consistentes
+                    id: stop.id || stop.deliveryId,
+                    deliveryId: stop.id || stop.deliveryId,
                     eta_seconds: arrivalTimeSeconds,
-                    vehicle_time_seconds: vehicleTimeAtArrival
+                    vehicle_time_seconds: vehicleTimeAtArrival,
+                    order: index + 1,
+                    type: stop.type || 'delivery'  // Garantir que type está definido
                 };
 
                 if (stop.type === 'pickup') {
@@ -370,11 +405,17 @@ class RouteOptimizationService {
                 return stopWithDetails;
             });
 
-            if (circularRoute && legs.length > stops.length) {
+            if (circularRoute && legs.length > uniqueStops.length) {
                 const finalLeg = legs[legs.length - 1];
                 totalDistance += finalLeg.distance.value;
                 totalDuration += finalLeg.duration.value;
             }
+
+            // 🔧 CORREÇÃO 4: Log de debug para verificar resultado
+            console.log(`✅ Rota calculada: ${stopsWithDetails.length} paradas únicas`);
+            stopsWithDetails.forEach((stop, idx) => {
+                console.log(`  ${idx + 1}. ID: ${stop.id} | Cliente: ${stop.customer_name || 'N/A'}`);
+            });
 
             return {
                 optimizedOrder: stopsWithDetails,
@@ -386,7 +427,7 @@ class RouteOptimizationService {
             console.error('Erro ao calcular detalhes da rota:', error);
             throw error;
         }
-    }
+}
 
     // MÉTODO PARA DEBUG E ANÁLISE
     getOptimizationReport() {
