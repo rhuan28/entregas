@@ -550,6 +550,9 @@ async function loadDeliveries() {
 
         await checkExistingRoute(routeDate);
 
+        // ✅ ADICIONAR ESTA PARTE - Inicializar ordem manual
+        initializeManualOrder();
+
         renderDeliveriesList();
         updateRouteStats();
 
@@ -711,7 +714,7 @@ function renderDeliveryItemContent(item, index) {
         const priorityClass = getPriorityClass(priority);
         const priorityEmoji = getPriorityEmoji(priority);
         
-        // Corrigir a classe da prioridade do produto
+        // Produto com classe de prioridade corrigida
         const productDisplay = item.product_name ? 
             `<span class="priority-indicator priority-${priorityClass}">${item.product_name}</span>` : '';
 
@@ -719,23 +722,25 @@ function renderDeliveryItemContent(item, index) {
             <div class="delivery-header">
                 <div class="delivery-info">
                     <h3>${item.customer_name} ${productDisplay}</h3>
+                </div>
+                <div class="delivery-priority-and-order">
                     <span class="priority priority-${priorityClass}">
                         ${priorityEmoji} ${getPriorityLabel(priority)}
                     </span>
-                </div>
-                <div class="order-control">
-                    <div class="order-number">${currentOrder}</div>
-                    <div class="order-buttons">
-                        <button class="order-btn order-up" 
-                                onclick="moveDelivery('${item.id}', 'up')"
-                                ${isFirst ? 'disabled' : ''}>
-                            ▲
-                        </button>
-                        <button class="order-btn order-down" 
-                                onclick="moveDelivery('${item.id}', 'down')"
-                                ${isLast ? 'disabled' : ''}>
-                            ▼
-                        </button>
+                    <div class="order-control">
+                        <div class="order-number">${currentOrder}</div>
+                        <div class="order-buttons">
+                            <button class="order-btn order-up" 
+                                    onclick="moveDelivery('${item.id}', 'up')"
+                                    ${isFirst ? 'disabled' : ''}>
+                                ▲
+                            </button>
+                            <button class="order-btn order-down" 
+                                    onclick="moveDelivery('${item.id}', 'down')"
+                                    ${isLast ? 'disabled' : ''}>
+                                ▼
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -835,6 +840,33 @@ async function checkExistingRoute(date) {
             directionsRenderer.setDirections({ routes: [] });
         }
     }
+}
+
+function initializeManualOrder() {
+    console.log('🔧 Inicializando ordem manual...');
+    
+    // Se já existe ordem manual, não sobrescrever
+    if (Object.keys(manualOrder).length > 0) {
+        console.log('Ordem manual já existe:', manualOrder);
+        return;
+    }
+    
+    // Inicializar ordem para entregas
+    deliveryData.forEach((delivery, index) => {
+        if (!manualOrder[delivery.id]) {
+            manualOrder[delivery.id] = index + 1;
+        }
+    });
+    
+    // Inicializar ordem para paradas de pickup
+    pickupStops.forEach((stop) => {
+        if (!manualOrder[stop.id]) {
+            const maxOrder = Math.max(0, ...Object.values(manualOrder));
+            manualOrder[stop.id] = maxOrder + 1;
+        }
+    });
+    
+    console.log('✅ Ordem manual inicializada:', manualOrder);
 }
 
 function updateRouteStats() {
@@ -1070,24 +1102,47 @@ function updateManualOrderFromDOM() {
 }
 
 function moveDelivery(deliveryId, direction) {
+    console.log(`🔧 DEBUG: moveDelivery chamada - ID: ${deliveryId}, Direção: ${direction}`);
+    console.log(`📊 Estado atual manualOrder:`, manualOrder);
+    
     const currentOrder = manualOrder[deliveryId];
-    if (!currentOrder) return;
-
-    const allOrders = Object.values(manualOrder).sort((a, b) => a - b);
-    const currentIndex = allOrders.indexOf(currentOrder);
-
-    let newOrder;
-    if (direction === 'up' && currentIndex > 0) {
-        newOrder = allOrders[currentIndex - 1] - 0.5;
-    } else if (direction === 'down' && currentIndex < allOrders.length - 1) {
-        newOrder = allOrders[currentIndex + 1] + 0.5;
-    } else {
+    console.log(`📍 Ordem atual da entrega ${deliveryId}:`, currentOrder);
+    
+    if (!currentOrder) {
+        console.error(`❌ Entrega ${deliveryId} não tem ordem definida!`);
+        showToast('Erro: entrega não tem ordem definida', 'error');
         return;
     }
 
-    manualOrder[deliveryId] = newOrder;
-    reorderAllDeliveries();
+    // Obter todos os IDs ordenados
+    const allIds = Object.keys(manualOrder).sort((a, b) => manualOrder[a] - manualOrder[b]);
+    const currentIndex = allIds.indexOf(deliveryId.toString());
+    
+    console.log(`📋 Todos os IDs ordenados:`, allIds);
+    console.log(`📍 Índice atual:`, currentIndex);
+
+    let targetIndex;
+    if (direction === 'up' && currentIndex > 0) {
+        targetIndex = currentIndex - 1;
+    } else if (direction === 'down' && currentIndex < allIds.length - 1) {
+        targetIndex = currentIndex + 1;
+    } else {
+        console.log(`❌ Não pode mover ${direction} - já está no limite`);
+        return;
+    }
+
+    // Trocar ordens
+    const targetId = allIds[targetIndex];
+    const tempOrder = manualOrder[deliveryId];
+    manualOrder[deliveryId] = manualOrder[targetId];
+    manualOrder[targetId] = tempOrder;
+    
+    console.log(`🔄 Trocou ordens entre ${deliveryId} e ${targetId}`);
+    console.log(`📊 Nova ordem:`, manualOrder);
+    
+    // Re-renderizar
     renderDeliveriesList();
+    showToast(`Entrega movida para ${direction === 'up' ? 'cima' : 'baixo'}!`, 'success');
 }
 
 function reorderAllDeliveries() {
@@ -1145,6 +1200,32 @@ function hideScrollIndicator() {
     if (indicator) {
         indicator.classList.remove('show');
     }
+}
+
+// ===== FUNÇÃO DE DEBUG TEMPORÁRIA =====
+// ADICIONAR esta função para debugar (linha ~1100):
+
+function debugMoveDelivery(deliveryId, direction) {
+    console.log('=== DEBUG MOVE DELIVERY ===');
+    console.log('ID:', deliveryId);
+    console.log('Direção:', direction);
+    console.log('Tipo do ID:', typeof deliveryId);
+    console.log('manualOrder completo:', manualOrder);
+    console.log('deliveryData IDs:', deliveryData.map(d => ({ id: d.id, type: typeof d.id })));
+    console.log('pickupStops IDs:', pickupStops.map(s => ({ id: s.id, type: typeof s.id })));
+    
+    // Verificar se o ID existe
+    const exists = manualOrder.hasOwnProperty(deliveryId);
+    console.log('ID existe no manualOrder?', exists);
+    
+    if (!exists) {
+        console.error('❌ ID não encontrado no manualOrder!');
+        // Tentar inicializar
+        initializeManualOrder();
+    }
+    
+    // Chamar função original
+    moveDelivery(deliveryId, direction);
 }
 
 // --- Configurações ---
