@@ -2409,3 +2409,146 @@ textarea:focus-visible {
         padding: 3px;
     }
 }
+
+/* ===== CORREÇÃO DO ESPAÇAMENTO - SUBSTITUIR NO styles.css ===== */
+
+/* Container para prioridade + controles de ordem - VERSÃO CORRIGIDA */
+.delivery-priority-and-order {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px; /* ✅ REDUZIDO de 8px para 4px */
+}
+
+/* Ajustar o cabeçalho da entrega */
+.delivery-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 15px;
+}
+
+.delivery-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.delivery-info h3 {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    line-height: 1.3;
+    word-wrap: break-word;
+}
+
+/* Prioridade posicionada acima - SEM MARGIN EXTRA */
+.delivery-priority-and-order .priority {
+    margin: 0; /* ✅ REMOVIDO margin-bottom */
+    align-self: flex-end;
+}
+
+/* Controles de ordem mais compactos */
+.order-control {
+    display: flex;
+    align-items: center;
+    gap: 6px; /* ✅ REDUZIDO de 8px para 6px */
+    background: rgba(229, 181, 179, 0.08);
+    border-radius: 6px;
+    padding: 3px; /* ✅ REDUZIDO de 4px para 3px */
+    border: 1px solid rgba(229, 181, 179, 0.2);
+}
+
+.order-number {
+    background: white;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    padding: 3px 6px; /* ✅ REDUZIDO de 4px 8px para 3px 6px */
+    font-weight: 700;
+    font-size: 12px; /* ✅ REDUZIDO de 13px para 12px */
+    color: var(--primary-color);
+    min-width: 28px; /* ✅ REDUZIDO de 32px para 28px */
+    text-align: center;
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.order-btn {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    width: 20px; /* ✅ REDUZIDO de 22px para 20px */
+    height: 16px; /* ✅ REDUZIDO de 18px para 16px */
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px; /* ✅ REDUZIDO de 10px para 9px */
+    font-weight: bold;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.order-btn:hover:not(:disabled) {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.order-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.order-btn:disabled {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.order-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1px; /* ✅ REDUZIDO de 2px para 1px */
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .delivery-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px; /* ✅ REDUZIDO de 10px para 8px */
+    }
+
+    .delivery-priority-and-order {
+        align-self: flex-end;
+        align-items: flex-end;
+        gap: 3px; /* ✅ REDUZIDO para mobile */
+    }
+
+    .order-number {
+        min-width: 26px;
+        padding: 2px 5px;
+        font-size: 11px;
+    }
+
+    .order-btn {
+        width: 18px;
+        height: 14px;
+        font-size: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .delivery-priority-and-order {
+        gap: 2px; /* ✅ AINDA MENOR para mobile pequeno */
+    }
+
+    .order-control {
+        gap: 4px;
+        padding: 2px;
+    }
+}
