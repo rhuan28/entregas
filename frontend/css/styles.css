@@ -1,4 +1,4 @@
-/* css/styles.css - Versão Completa Otimizada com Correções de Espaçamento */
+/* css/styles.css - Versão Limpa e Otimizada */
 
 /* ============================== */
 /* 🔹 VARIÁVEIS CSS - CORES DO DEMIPLIÉ */
@@ -380,7 +380,7 @@ h3 {
 }
 
 /* ============================== */
-/* 🔹 SEÇÃO DE ENTREGAS (LISTA) - ✅ CORRIGIDO */
+/* 🔹 SEÇÃO DE ENTREGAS (LISTA) */
 /* ============================== */
 .deliveries-section {
     background: white;
@@ -411,7 +411,7 @@ h3 {
     background: white;
     border: 1px solid var(--border-light);
     border-radius: var(--border-radius);
-    padding: 10px; /* ✅ REDUZIDO de 12px para 10px */
+    padding: 12px;
     margin-bottom: 8px;
     transition: all 0.3s ease;
     position: relative;
@@ -428,63 +428,6 @@ h3 {
 .delivery-item.dragging { opacity: 0.5; }
 .delivery-item.drag-over { border-top: 2px solid var(--primary-color); }
 
-/* Layout do Item de Entrega - ✅ CORRIGIDO */
-.delivery-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 6px; /* ✅ REDUZIDO de 8px para 6px */
-    gap: 15px;
-}
-
-.delivery-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0; /* ✅ ADICIONADO: Remove gap entre elementos */
-}
-
-.delivery-info h3 {
-    margin: 0 !important; /* ✅ CORRIGIDO: Remove completamente as margens */
-    font-size: 16px;
-    line-height: 1.2; /* ✅ ADICIONADO */
-    word-wrap: break-word;
-    color: var(--text-dark);
-    font-weight: 600;
-}
-
-/* ✅ NOVA REGRA: Garantir que não há espaço extra após elementos inline */
-.delivery-info h3 * {
-    margin-bottom: 0 !important;
-    line-height: 1.2 !important;
-}
-
-.delivery-item p {
-    margin: 2px 0; /* ✅ REDUZIDO de 3px para 2px */
-    font-size: 13px;
-    line-height: 1.3;
-}
-
-/* ✅ NOVA REGRA: Primeiro parágrafo após o header */
-.delivery-header + p {
-    margin-top: 4px !important;
-}
-
-.delivery-priority-and-order {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 3px; /* ✅ REDUZIDO de 4px para 3px */
-    flex-shrink: 0; /* ✅ ADICIONADO: Impede que encolha */
-}
-
-/* ✅ NOVA REGRA: Prioridade sem margin extra */
-.delivery-priority-and-order .priority {
-    margin: 0; /* ✅ ADICIONADO: Remove margens da prioridade */
-    align-self: flex-end;
-}
-
 .delivery-actions {
     margin-top: 8px;
     display: flex;
@@ -498,14 +441,48 @@ h3 {
     font-size: 11px;
 }
 
-/* Controles de Ordem - ✅ CORRIGIDO */
+/* Layout do Item de Entrega (versão mais atual) */
+.delivery-priority-and-order {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.delivery-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    gap: 15px;
+}
+
+.delivery-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.delivery-info h3 {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    line-height: 1.3;
+    word-wrap: break-word;
+}
+
+.delivery-item p {
+    margin: 3px 0;
+    font-size: 13px;
+    line-height: 1.3;
+}
+
+/* Controles de Ordem (versão mais atual) */
 .order-control {
     display: flex;
     align-items: center;
-    gap: 6px; /* ✅ REDUZIDO de 8px para 6px */
+    gap: 6px;
     background: rgba(229, 181, 179, 0.08);
     border-radius: 6px;
-    padding: 3px; /* ✅ REDUZIDO de 4px para 3px */
+    padding: 3px;
     border: 1px solid rgba(229, 181, 179, 0.2);
 }
 
@@ -513,11 +490,11 @@ h3 {
     background: white;
     border: 1px solid var(--primary-color);
     border-radius: 4px;
-    padding: 3px 6px; /* ✅ REDUZIDO de 4px 8px para 3px 6px */
+    padding: 3px 6px;
     font-weight: 700;
-    font-size: 12px; /* ✅ REDUZIDO de 13px para 12px */
+    font-size: 12px;
     color: var(--primary-color);
-    min-width: 28px; /* ✅ REDUZIDO de 32px para 28px */
+    min-width: 28px;
     text-align: center;
     user-select: none;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
@@ -526,21 +503,21 @@ h3 {
 .order-buttons {
     display: flex;
     flex-direction: column;
-    gap: 1px; /* ✅ REDUZIDO de 2px para 1px */
+    gap: 1px;
 }
 
 .order-btn {
     background: var(--primary-color);
     border: none;
     color: white;
-    width: 20px; /* ✅ REDUZIDO de 22px para 20px */
-    height: 16px; /* ✅ REDUZIDO de 18px para 16px */
+    width: 20px;
+    height: 16px;
     border-radius: 3px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 9px; /* ✅ REDUZIDO de 10px para 9px */
+    font-size: 9px;
     font-weight: bold;
     transition: all 0.2s ease;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -564,17 +541,6 @@ h3 {
     transform: none;
     box-shadow: none;
     opacity: 0.6;
-}
-
-/* ✅ NOVOS HOVER EFFECTS */
-.delivery-item:hover .order-control {
-    background: rgba(229, 181, 179, 0.12);
-    border-color: rgba(229, 181, 179, 0.3);
-}
-
-.delivery-item:hover .order-number {
-    border-color: var(--primary-hover);
-    color: var(--primary-hover);
 }
 
 /* Tempos de Entrega */
@@ -603,7 +569,7 @@ h3 {
 .vehicle-time .icon { color: #fd7e14; }
 
 /* ============================== */
-/* 🔹 STATUS E PRIORIDADE - ✅ CORRIGIDO */
+/* 🔹 STATUS E PRIORIDADE (ATUALIZADO) */
 /* ============================== */
 .priority, .status {
     padding: 3px 8px;
@@ -631,21 +597,9 @@ h3 {
     border-radius: 12px;
     font-size: 11px;
     font-weight: 600;
-    margin-left: 6px; /* ✅ REDUZIDO de 8px para 6px */
-    margin-top: 0;
-    margin-bottom: 0;
+    margin-left: 8px;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
-    vertical-align: middle; /* ✅ ADICIONADO: Alinha com o texto */
 }
-
-/* ✅ CORRIGIDO: Se o produto estiver inline com o nome */
-.delivery-info h3 .priority-indicator {
-    vertical-align: baseline;
-    margin-left: 4px;
-    margin-top: -1px; /* ✅ ADICIONADO: Pequeno ajuste de alinhamento */
-}
-
 .priority-indicator.priority-0, .priority-indicator.priority-normal { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
 .priority-indicator.priority-1, .priority-indicator.priority-media { background-color: #FFF7E6; color: #FAAD14; border: 1px solid #FFD666; }
 .priority-indicator.priority-2, .priority-indicator.priority-alta { background-color: #FFF2E6; color: #FD7E14; border: 1px solid #FFAC6B; }
@@ -785,202 +739,31 @@ h3 {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================== */
-/* 🔹 RESPONSIVIDADE - ✅ CORRIGIDO */
+/* 🔹 RESPONSIVIDADE */
 /* ============================== */
 @media (max-width: 768px) {
     .container { padding: 16px; }
-    
-    .navbar {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 12px 16px;
-    }
-
-    .navbar-left {
-        width: 100%;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .navbar-logo {
-        height: 28px;
-    }
-
-    .navbar-title {
-        font-size: 16px;
-    }
-
-    .menu-toggle {
-        display: block;
-    }
-    
-    .route-header, .archive-header { 
-        flex-direction: column; 
-        align-items: flex-start; 
-        gap: 12px; 
-        margin-top: 80px; 
-    }
-    
+    .route-header, .archive-header { flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 80px; }
     h1 { font-size: 20px; }
-    
-    .delivery-header { 
-        flex-direction: column; 
-        align-items: flex-start; 
-        gap: 6px; /* ✅ REDUZIDO de 8px para 6px */
-        margin-bottom: 4px; /* ✅ ADICIONADO */
-    }
-    
-    .delivery-priority-and-order { 
-        align-self: flex-end; 
-        align-items: flex-end; 
-        gap: 2px; /* ✅ REDUZIDO de 3px para 2px */
-    }
-    
-    .delivery-info h3 {
-        font-size: 15px;
-        margin: 0 !important; /* ✅ GARANTIR que não há margin */
-    }
-
-    .priority-indicator {
-        margin-left: 4px; /* ✅ REDUZIDO para mobile */
-        font-size: 10px;
-        padding: 1px 4px;
-    }
-    
-    .order-number {
-        min-width: 26px;
-        padding: 2px 5px;
-        font-size: 11px;
-    }
-
-    .order-btn {
-        width: 18px;
-        height: 14px;
-        font-size: 8px;
-    }
-    
-    .delivery-actions { 
-        flex-direction: column; 
-        width: 100%; 
-        gap: 8px; 
-    }
-    
-    .delivery-actions button { 
-        width: 100%; 
-    }
-    
-    .map-controls, .action-buttons { 
-        flex-direction: column; 
-        width: 100%; 
-        gap: 8px; 
-    }
-    
-    .route-info { 
-        flex-direction: column; 
-        gap: 16px; 
-        text-align: center; 
-    }
-    
-    .route-stats { 
-        width: 100%; 
-        justify-content: space-around; 
-        gap: 20px; 
-    }
-    
+    .delivery-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .delivery-priority-and-order { align-self: flex-end; align-items: flex-end; gap: 3px; }
+    .map-controls, .action-buttons { flex-direction: column; width: 100%; gap: 8px; }
+    .route-info { flex-direction: column; gap: 16px; text-align: center; }
+    .route-stats { width: 100%; justify-content: space-around; gap: 20px; }
     #map { height: 300px; }
-    
-    .modal-content { 
-        margin: 20px; 
-        width: calc(100% - 40px); 
-    }
-    
-    .form-row, .search-form { 
-        grid-template-columns: 1fr; 
-    }
-    
-    .archived-route-card { 
-        padding: 16px; 
-    }
-
-    .route-card-header { 
-        flex-direction: column; 
-        align-items: flex-start; 
-        gap: 8px; 
-    }
-    
-    .route-actions { 
-        align-self: flex-end; 
-    }
-
-    .delivery-times {
-        gap: 8px;
-    }
-    
-    .delivery-time-item {
-        padding: 2px 6px;
-        font-size: 10px;
-    }
-    
-    .optimization-buttons {
-        gap: 6px;
-    }
-    
-    .optimization-buttons .btn {
-        padding: 6px 10px;
-        font-size: 12px;
-    }
+    .modal-content { margin: 20px; width: calc(100% - 40px); }
+    .form-row, .search-form { grid-template-columns: 1fr; }
+    .archived-route-card, .route-card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .route-actions { align-self: flex-end; }
 }
 
 @media (max-width: 480px) {
     body { font-size: 13px; }
-    
-    .btn { 
-        padding: 8px 16px; 
-        font-size: 12px; 
-    }
-    
-    .form-group input, .form-group select, .form-group textarea { 
-        padding: 8px 10px;
-        font-size: 13px; 
-    }
-    
-    .navbar-title {
-        font-size: 16px;
-    }
-    
-    .route-stat strong { 
-        font-size: 18px; 
-    }
-    
-    .route-stat span {
-        font-size: 10px;
-    }
-
-    .home-container, .archive-container { 
-        padding: 80px 16px 16px 16px; 
-    }
-
-    .delivery-item {
-        padding: 8px; /* ✅ AINDA MENOR em telas muito pequenas */
-    }
-    
-    .delivery-header {
-        gap: 4px;
-        margin-bottom: 3px; /* ✅ ADICIONADO */
-    }
-    
-    .delivery-priority-and-order {
-        gap: 1px; /* ✅ ADICIONADO */
-    }
-    
-    .delivery-item p {
-        margin: 1px 0; /* ✅ ADICIONADO: ainda menor no mobile */
-    }
-
-    .order-control { 
-        gap: 4px; 
-        padding: 2px; 
-    }
+    .btn { padding: 8px 16px; font-size: 12px; }
+    .form-group input, .form-group select, .form-group textarea { font-size: 13px; }
+    .route-stat strong { font-size: 18px; }
+    .home-container, .archive-container { padding: 80px 16px 16px 16px; }
+    .order-control { gap: 4px; padding: 2px; }
 }
 
 /* ============================== */
@@ -994,252 +777,17 @@ h3 {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--light-gray); border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--light-gray); }
 ::-webkit-scrollbar-thumb { background: var(--primary-color); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary-hover); }
 
 /* Acessibilidade */
 .btn:focus-visible, .form-control:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* Impressão */
 @media print {
-    .navbar, .btn, .action-buttons, .delivery-actions, .route-actions { display: none !important; }
+    .navbar, .btn, .action-buttons, .delivery-actions, .route-actions, .modal-footer { display: none !important; }
     body { background: white !important; color: black !important; }
     .route-card, .delivery-item, .form-section { box-shadow: none !important; border: 1px solid #ddd !important; }
-}
-
-/* ===== CORREÇÃO DEFINITIVA DO ESPAÇAMENTO - PRIORIDADE ACIMA DOS BOTÕES ===== */
-
-/* 1. ELIMINAR COMPLETAMENTE O MARGIN DO H3 */
-.delivery-info h3 {
-    margin: 0 !important;
-    padding: 0 !important; /* ✅ ADICIONAR padding zero também */
-    font-size: 16px;
-    line-height: 1.1 !important; /* ✅ REDUZIR ainda mais o line-height */
-    word-wrap: break-word;
-    color: var(--text-dark);
-    font-weight: 600;
-    display: block; /* ✅ GARANTIR que é block */
-}
-
-/* 2. CORRIGIR O CONTAINER DELIVERY-INFO */
-.delivery-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0 !important; /* ✅ FORÇAR gap zero */
-    align-items: flex-start; /* ✅ ADICIONAR alinhamento */
-}
-
-/* 3. HEADER DA ENTREGA MAIS COMPACTO */
-.delivery-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 4px !important; /* ✅ REDUZIR ainda mais */
-    gap: 12px; /* ✅ REDUZIR gap entre nome e controles */
-}
-
-/* 4. CONTAINER DE PRIORIDADE E ORDEM ULTRA COMPACTO */
-.delivery-priority-and-order {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px !important; /* ✅ REDUZIR para 2px */
-    flex-shrink: 0;
-    min-height: 0; /* ✅ ADICIONAR para não criar altura mínima */
-}
-
-/* 5. PRIORIDADE SEM NENHUM ESPAÇO EXTRA */
-.delivery-priority-and-order .priority {
-    margin: 0 !important;
-    padding: 2px 6px !important; /* ✅ MANTER padding mínimo */
-    align-self: flex-end;
-    line-height: 1 !important; /* ✅ LINE HEIGHT MÍNIMO */
-    font-size: 10px !important; /* ✅ REDUZIR fonte */
-}
-
-/* 6. CONTROLE DE ORDEM AINDA MAIS COMPACTO */
-.order-control {
-    display: flex;
-    align-items: center;
-    gap: 4px !important; /* ✅ REDUZIR gap */
-    background: rgba(229, 181, 179, 0.08);
-    border-radius: 6px;
-    padding: 2px !important; /* ✅ REDUZIR padding */
-    border: 1px solid rgba(229, 181, 179, 0.2);
-}
-
-/* 7. NÚMERO DA ORDEM COMPACTO */
-.order-number {
-    background: white;
-    border: 1px solid var(--primary-color);
-    border-radius: 4px;
-    padding: 2px 5px !important; /* ✅ REDUZIR ainda mais */
-    font-weight: 700;
-    font-size: 11px !important; /* ✅ AUMENTAR um pouco a fonte */
-    color: var(--primary-color);
-    min-width: 26px !important; /* ✅ REDUZIR largura mínima */
-    text-align: center;
-    user-select: none;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    line-height: 1 !important; /* ✅ LINE HEIGHT MÍNIMO */
-}
-
-/* 8. BOTÕES DE ORDEM MENORES */
-.order-btn {
-    background: var(--primary-color);
-    border: none;
-    color: white;
-    width: 18px !important; /* ✅ REDUZIR ainda mais */
-    height: 14px !important; /* ✅ REDUZIR ainda mais */
-    border-radius: 3px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 8px !important; /* ✅ REDUZIR fonte */
-    font-weight: bold;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    line-height: 1 !important;
-}
-
-/* 9. GAP MÍNIMO ENTRE BOTÕES */
-.order-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 0px !important; /* ✅ ELIMINAR gap completamente */
-}
-
-/* 10. PARÁGRAFOS MAIS PRÓXIMOS DO HEADER */
-.delivery-item p {
-    margin: 1px 0 !important; /* ✅ REDUZIR ainda mais */
-    font-size: 13px;
-    line-height: 1.2 !important;
-}
-
-/* 11. PRIMEIRO PARÁGRAFO COLADO NO HEADER */
-.delivery-header + p {
-    margin-top: 2px !important; /* ✅ REDUZIR de 4px para 2px */
-}
-
-/* 12. ITEM DE ENTREGA MAIS COMPACTO */
-.delivery-item {
-    background: white;
-    border: 1px solid var(--border-light);
-    border-radius: var(--border-radius);
-    padding: 8px !important; /* ✅ REDUZIR padding geral */
-    margin-bottom: 8px;
-    transition: all 0.3s ease;
-    position: relative;
-    animation: fadeIn 0.3s ease-out;
-}
-
-/* 13. PRIORITY INDICATOR INLINE MAIS COMPACTO */
-.priority-indicator {
-    display: inline-block;
-    padding: 1px 4px !important; /* ✅ REDUZIR padding */
-    border-radius: 12px;
-    font-size: 9px !important; /* ✅ REDUZIR fonte */
-    font-weight: 600;
-    margin-left: 4px !important; /* ✅ REDUZIR margin */
-    margin-top: 0;
-    margin-bottom: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    vertical-align: middle;
-    line-height: 1 !important;
-}
-
-/* 14. CORREÇÃO PARA PRODUTOS INLINE NO NOME */
-.delivery-info h3 .priority-indicator {
-    vertical-align: baseline;
-    margin-left: 3px !important; /* ✅ REDUZIR para inline */
-    margin-top: -1px;
-}
-
-/* 15. RESPONSIVIDADE ULTRA COMPACTA */
-@media (max-width: 768px) {
-    .delivery-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px !important; /* ✅ REDUZIR para mobile */
-        margin-bottom: 2px !important; /* ✅ REDUZIR ainda mais */
-    }
-
-    .delivery-priority-and-order {
-        align-self: flex-end;
-        align-items: flex-end;
-        gap: 1px !important; /* ✅ GAP MÍNIMO */
-    }
-
-    .delivery-info h3 {
-        font-size: 15px;
-        line-height: 1 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    .priority-indicator {
-        margin-left: 3px !important;
-        font-size: 8px !important;
-        padding: 1px 3px !important;
-    }
-
-    .order-number {
-        min-width: 24px !important;
-        padding: 1px 4px !important;
-        font-size: 10px !important;
-    }
-
-    .order-btn {
-        width: 16px !important;
-        height: 12px !important;
-        font-size: 7px !important;
-    }
-}
-
-@media (max-width: 480px) {
-    .delivery-item {
-        padding: 6px !important; /* ✅ AINDA MENOR */
-    }
-
-    .delivery-header {
-        gap: 3px !important;
-        margin-bottom: 1px !important;
-    }
-
-    .delivery-priority-and-order {
-        gap: 0px !important; /* ✅ SEM GAP */
-    }
-
-    .delivery-item p {
-        margin: 0px 0 !important; /* ✅ SEM MARGIN */
-    }
-
-    .delivery-header + p {
-        margin-top: 1px !important;
-    }
-}
-
-/* 16. GARANTIR QUE NÃO HÁ OVERFLOW OU ESPAÇOS EXTRAS */
-.delivery-priority-and-order * {
-    margin-bottom: 0 !important;
-    margin-top: 0 !important;
-}
-
-/* 17. FORÇAR COMPACTAÇÃO TOTAL */
-.delivery-info, .delivery-info * {
-    overflow: visible;
-    max-height: none;
-}
-
-/* 18. REMOVER QUALQUER ESPAÇO DE BOX-SIZING PROBLEMÁTICO */
-.delivery-header, .delivery-info, .delivery-priority-and-order {
-    box-sizing: border-box;
-    min-height: 0;
-    max-width: 100%;
 }
