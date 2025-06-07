@@ -587,8 +587,8 @@ router.post('/optimize', async (req, res) => {
 
         // Busca as entregas do dia que precisam ser otimizadas
         const deliveriesResult = await db.query(
-            'SELECT * FROM deliveries WHERE order_date = $1 AND status IN ($2, $3) ORDER BY priority DESC, id ASC',
-            [routeDate, 'pending', 'optimized']
+            'SELECT * FROM deliveries WHERE order_date = $1 AND status IN ($2, $3, $4) ORDER BY priority DESC, id ASC',
+            [routeDate, 'pending', 'optimized', 'ordem_manual']
         );
 
         if (deliveriesResult.rows.length === 0 && (!pickupStops || pickupStops.length === 0)) {

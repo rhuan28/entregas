@@ -533,7 +533,6 @@ function showOptimizedRoute(route) {
 
 // --- Carregamento de Dados ---
 async function loadDeliveries() {
-    isRouteAlreadyOptimized = false;
     try {
         const routeDate = getRouteDate();
         console.log(`Carregando entregas para a data ${routeDate}...`);
