@@ -1571,20 +1571,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
             
             if (response.ok && result.routeId) {
-                isRouteAlreadyOptimized = true;
-                currentRoute = result;
+                showToast(`Rota otimizada! Foram incluídas ${result.optimizedOrder.length} paradas.`, 'success');
                 
-                const newManualOrder = {};
-                result.optimizedOrder.forEach((item) => {
-                    const itemId = item.deliveryId || item.id;
-                    if (itemId) newManualOrder[itemId] = item.order;
-                });
-                manualOrder = newManualOrder;
-                
-                showToast(`Rota otimizada! ${result.optimizedOrder.length} paradas.`, 'success');
-                showOptimizedRoute(currentRoute);
-                updateRouteStats();
-                renderDeliveriesList();
+                // Recarrega todos os dados da rota do servidor.
+                // Esta função já atualiza a lista de entregas, o mapa e as estatísticas com os novos dados.
+                await loadDeliveries();
+
             } else {
                 throw new Error(result.error || result.message || "Erro desconhecido na otimização");
             }
