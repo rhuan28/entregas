@@ -1525,8 +1525,6 @@ window.onload = async () => {
 };
 
 // --- Otimização de Rota ---
-// Substitua o seu bloco 'DOMContentLoaded' inteiro por este:
-
 document.addEventListener('DOMContentLoaded', function() {
     // Formulário de nova entrega
     const deliveryForm = document.getElementById('delivery-form');
@@ -1577,8 +1575,7 @@ document.addEventListener('DOMContentLoaded', function() {
         triggeredBy.innerHTML = '<span class="loading"></span>';
 
         try {
-            // Se 'useManualOrder' for true, envia a ordem da tela. Senão, envia um objeto vazio.
-            // O back-end interpreta um objeto vazio como um pedido de otimização automática.
+            // Se 'useManualOrder' for true, envia a ordem da tela. Senão, envia um objeto vazio para forçar a otimização automática.
             const orderToSend = useManualOrder ? manualOrder : {};
 
             const requestData = {
@@ -1598,14 +1595,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
             
             if (response.ok && result.routeId) {
-                // Após qualquer otimização bem-sucedida, marcamos que a rota já foi otimizada uma vez.
-                isRouteAlreadyOptimized = true;
-
                 showToast(`Rota processada com sucesso! ${result.optimizedOrder.length} paradas.`, 'success');
-                
                 // Recarrega todos os dados para garantir que a tela esteja 100% sincronizada com o back-end.
                 await loadDeliveries();
-
             } else {
                 throw new Error(result.error || result.message || "Erro desconhecido na otimização");
             }
@@ -1622,11 +1614,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Listener do botão principal "Otimizar Rota"
     if (optimizeRouteBtn) {
         optimizeRouteBtn.addEventListener('click', function() {
-            // Se a rota já foi otimizada antes, o botão principal agora SEMPRE respeitará a ordem manual da tela.
-            // Se nunca foi otimizada, `isRouteAlreadyOptimized` será `false`, acionando a otimização automática inicial.
-            const shouldUseManualOrder = isRouteAlreadyOptimized;
-            
-            runOptimization({ useManualOrder: shouldUseManualOrder, triggeredBy: this });
+            // Este botão AGORA SEMPRE respeita a ordem manual presente na tela.
+            runOptimization({ useManualOrder: true, triggeredBy: this });
         });
     }
 
@@ -1634,13 +1623,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (autoOptimizeBtn) {
         autoOptimizeBtn.addEventListener('click', function() {
             // O botão de lâmpada SEMPRE força uma nova otimização automática do zero.
-            // Adicionado um confirm para segurança, pois descarta a ordem manual.
-            if (confirm("Isso irá descartar qualquer ordenação manual e criar uma nova rota otimizada. Deseja continuar?")) {
+            if (confirm("Isso irá descartar qualquer ordenação manual e criar uma nova rota otimizada pelo sistema. Deseja continuar?")) {
                 runOptimization({ useManualOrder: false, triggeredBy: this });
             }
         });
     }
-    // ----- FIM DA LÓGICA CORRIGIDA -----
 });
 
 // Funções globais

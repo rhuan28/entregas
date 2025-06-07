@@ -38,14 +38,16 @@ class RouteOptimizationService {
 
             console.log("ROUTING_SERVICE: Objeto manualOrder recebido:", JSON.stringify(manualOrder, null, 2));
             
-            // Se existe ordem manual, usa rota fixa
-            const isAnyManualOrderSet = Object.keys(manualOrder).some(key => manualOrder[key]);
+            // Verificação mais robusta para garantir que manualOrder seja um objeto e tenha chaves.
+            const isAnyManualOrderSet = manualOrder && typeof manualOrder === 'object' && Object.keys(manualOrder).length > 0;
             console.log("ROUTING_SERVICE: A condição 'isAnyManualOrderSet' é:", isAnyManualOrderSet);
+            
             if (isAnyManualOrderSet) {
                 console.log('📌 Detectada ordenação manual. Usando ordem definida pelo usuário.');
                 const sortedDeliveries = [...deliveries].sort((a, b) => {
-                    const orderA = manualOrder[a.id] ? parseInt(manualOrder[a.id], 10) : 999;
-                    const orderB = manualOrder[b.id] ? parseInt(manualOrder[b.id], 10) : 999;
+                    // Garante que o ID seja string para a chave do objeto
+                    const orderA = manualOrder[String(a.id)] ? parseInt(manualOrder[String(a.id)], 10) : 999;
+                    const orderB = manualOrder[String(b.id)] ? parseInt(manualOrder[String(b.id)], 10) : 999;
                     return orderA - orderB;
                 });
                 return this.calculateRouteDetails(sortedDeliveries, depot, circularRoute, stopTimeMinutes);
@@ -60,7 +62,8 @@ class RouteOptimizationService {
         } catch (error) {
             console.error('❌ Erro na otimização:', error.message);
             const fallbackOrder = deliveries.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-            return { optimizedOrder: fallbackOrder.map(d => ({ ...d, eta_seconds: null, vehicle_time_seconds: null })) };
+            // Retorna um objeto que não causará erro no frontend
+            return { optimizedOrder: fallbackOrder.map(d => ({ ...d, id: d.id, eta_seconds: null, vehicle_time_seconds: null })), totalDistance: 0, totalDuration: 0 };
         }
     }
 
