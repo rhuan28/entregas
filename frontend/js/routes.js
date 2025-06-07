@@ -677,25 +677,28 @@ function renderDeliveryItemContent(item, index) {
     const currentOrder = manualOrder[item.id] || (index + 1);
 
     if (item.type === 'pickup') {
+        // ===== BLOCO CORRIGIDO =====
         return `
             <div class="delivery-header">
                 <div class="delivery-info">
                     <h3>🏪 ${item.customer_name || 'Parada na Confeitaria'}</h3>
-                    <span class="priority priority-0">🏪 Parada</span>
                 </div>
-                <div class="order-control">
-                    <div class="order-number">${currentOrder}</div>
-                    <div class="order-buttons">
-                        <button class="order-btn order-up" 
-                                onclick="moveDelivery('${item.id}', 'up')"
-                                ${isFirst ? 'disabled' : ''}>
-                            ▲
-                        </button>
-                        <button class="order-btn order-down" 
-                                onclick="moveDelivery('${item.id}', 'down')"
-                                ${isLast ? 'disabled' : ''}>
-                            ▼
-                        </button>
+                <div class="delivery-priority-and-order">
+                    <span class="priority priority-0">🏪 Parada</span>
+                    <div class="order-control">
+                        <div class="order-number">${currentOrder}</div>
+                        <div class="order-buttons">
+                            <button class="order-btn order-up" 
+                                    onclick="moveDelivery('${item.id}', 'up')"
+                                    ${isFirst ? 'disabled' : ''}>
+                                ▲
+                            </button>
+                            <button class="order-btn order-down" 
+                                    onclick="moveDelivery('${item.id}', 'down')"
+                                    ${isLast ? 'disabled' : ''}>
+                                ▼
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -714,7 +717,6 @@ function renderDeliveryItemContent(item, index) {
         const priorityClass = getPriorityClass(priority);
         const priorityEmoji = getPriorityEmoji(priority);
         
-        // Produto com classe de prioridade corrigida
         const productDisplay = item.product_name ? 
             `<span class="priority-indicator priority-${priorityClass}">${item.product_name}</span>` : '';
 
