@@ -1,4 +1,4 @@
-/* css/styles.css - Versão Limpa e Otimizada */
+/* css/styles.css - Versão Final Corrigida (Layout do Item) */
 
 /* ============================== */
 /* 🔹 VARIÁVEIS CSS - CORES DO DEMIPLIÉ */
@@ -407,27 +407,6 @@ h3 {
     margin-bottom: 20px;
 }
 
-.delivery-item {
-    background: white;
-    border: 1px solid var(--border-light);
-    border-radius: var(--border-radius);
-    padding: 12px;
-    margin-bottom: 8px;
-    transition: all 0.3s ease;
-    position: relative;
-    animation: fadeIn 0.3s ease-out;
-}
-
-.delivery-item:hover {
-    box-shadow: var(--shadow-hover);
-    transform: translateY(-1px);
-    border-color: var(--primary-light);
-}
-
-.delivery-item.draggable { cursor: move; }
-.delivery-item.dragging { opacity: 0.5; }
-.delivery-item.drag-over { border-top: 2px solid var(--primary-color); }
-
 .delivery-actions {
     margin-top: 8px;
     display: flex;
@@ -439,108 +418,6 @@ h3 {
 .delivery-actions .btn-sm {
     padding: 4px 8px;
     font-size: 11px;
-}
-
-/* Layout do Item de Entrega (versão mais atual) */
-.delivery-priority-and-order {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-}
-
-.delivery-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 8px;
-    gap: 15px;
-}
-
-.delivery-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.delivery-info h3 {
-    margin: 0 0 6px 0;
-    font-size: 16px;
-    line-height: 1.3;
-    word-wrap: break-word;
-}
-
-.delivery-item p {
-    margin: 3px 0;
-    font-size: 13px;
-    line-height: 1.3;
-}
-
-/* Controles de Ordem (versão mais atual) */
-.order-control {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(229, 181, 179, 0.08);
-    border-radius: 6px;
-    padding: 3px;
-    border: 1px solid rgba(229, 181, 179, 0.2);
-}
-
-.order-number {
-    background: white;
-    border: 1px solid var(--primary-color);
-    border-radius: 4px;
-    padding: 3px 6px;
-    font-weight: 700;
-    font-size: 12px;
-    color: var(--primary-color);
-    min-width: 28px;
-    text-align: center;
-    user-select: none;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-
-.order-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-}
-
-.order-btn {
-    background: var(--primary-color);
-    border: none;
-    color: white;
-    width: 20px;
-    height: 16px;
-    border-radius: 3px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    font-weight: bold;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-}
-
-.order-btn:hover:not(:disabled) {
-    background: var(--primary-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-}
-
-.order-btn:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-}
-
-.order-btn:disabled {
-    background: #d1d5db;
-    color: #9ca3af;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-    opacity: 0.6;
 }
 
 /* Tempos de Entrega */
@@ -568,28 +445,167 @@ h3 {
 .arrival-time .icon { color: #007bff; }
 .vehicle-time .icon { color: #fd7e14; }
 
-/* ============================== */
-/* 🔹 STATUS E PRIORIDADE (ATUALIZADO) */
-/* ============================== */
-.priority, .status {
+/* ==================================================================== */
+/* 🔹 LAYOUT DO ITEM DE ENTREGA (CORREÇÃO UNIFICADA) */
+/* ==================================================================== */
+.delivery-item {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: var(--border-radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    position: relative; /* Alteração para o contexto de posicionamento */
+    animation: fadeIn 0.3s ease-out;
+}
+
+.delivery-item:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
+    border-color: var(--primary-light);
+}
+
+.delivery-item.draggable { cursor: move; }
+.delivery-item.dragging { opacity: 0.5; }
+.delivery-item.drag-over { border-top: 2px solid var(--primary-color); }
+
+/* Transforma o header em um container simples, sem flex */
+.delivery-header {
+    display: block;
+    margin-bottom: 0;
+}
+
+.delivery-info {
+    /* Adiciona espaço à direita para não deixar o texto ir para baixo dos controles */
+    padding-right: 110px; 
+}
+
+.delivery-info h3 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    line-height: 1.3;
+    word-wrap: break-word;
+    color: var(--text-dark);
+    font-weight: 600;
+}
+
+.delivery-item p {
+    margin: 3px 0;
+    font-size: 13px;
+    line-height: 1.3;
+}
+
+/* Posiciona o bloco de controles no canto superior direito do card */
+.delivery-priority-and-order {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.delivery-priority-and-order .priority {
+    margin: 0;
     padding: 3px 8px;
     font-size: 11px;
     border-radius: 12px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
     display: inline-block;
 }
 
-.priority-0, .priority.priority-0 { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
-.priority-1, .priority.priority-1 { background-color: #FFF7E6; color: #FAAD14; border: 1px solid #FFD666; }
-.priority-2, .priority.priority-2 { background-color: #FFF2E6; color: #FD7E14; border: 1px solid #FFAC6B; }
-.priority-3, .priority.priority-3 { background-color: #FFF2F0; color: #FF4D4F; border: 1px solid #FFADD2; }
+.order-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(229, 181, 179, 0.08);
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid rgba(229, 181, 179, 0.2);
+}
 
-.status-pending { background-color: #F9F0FF; color: #722ED1; border: 1px solid #D3ADF7; }
-.status-optimized, .status-delivered { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
-.status-in_transit { background-color: #E6F7FF; color: #1890FF; border: 1px solid #91D5FF; }
-.status-cancelled { background-color: #FFF2F0; color: #FF4D4F; border: 1px solid #FFADD2; }
+.order-number {
+    background: white;
+    border: 1px solid var(--primary-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--primary-color);
+    min-width: 32px;
+    text-align: center;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.order-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.order-btn {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.order-btn:hover:not(:disabled) {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.order-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.order-btn:disabled {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.delivery-item:hover .order-control {
+    background: rgba(229, 181, 179, 0.12);
+    border-color: rgba(229, 181, 179, 0.3);
+}
+
+.delivery-item:hover .order-number {
+    border-color: var(--primary-hover);
+    color: var(--primary-hover);
+}
+/* ==================================================================== */
+
+/* ============================== */
+/* 🔹 STATUS E PRIORIDADE */
+/* ============================== */
+.status {
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-block;
+}
 
 .priority-indicator {
     display: inline-block;
@@ -597,13 +613,22 @@ h3 {
     border-radius: 12px;
     font-size: 11px;
     font-weight: 600;
-    margin-left: 8px;
+    margin-left: 6px;
     text-transform: uppercase;
+    vertical-align: middle;
 }
-.priority-indicator.priority-0, .priority-indicator.priority-normal { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
-.priority-indicator.priority-1, .priority-indicator.priority-media { background-color: #FFF7E6; color: #FAAD14; border: 1px solid #FFD666; }
-.priority-indicator.priority-2, .priority-indicator.priority-alta { background-color: #FFF2E6; color: #FD7E14; border: 1px solid #FFAC6B; }
-.priority-indicator.priority-3, .priority-indicator.priority-urgente { background-color: #FFF2F0; color: #FF4D4F; border: 1px solid #FFADD2; }
+
+/* Cores de Prioridade */
+.priority-0, .priority.priority-0, .priority-indicator.priority-0, .priority-indicator.priority-normal { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
+.priority-1, .priority.priority-1, .priority-indicator.priority-1, .priority-indicator.priority-media { background-color: #FFF7E6; color: #FAAD14; border: 1px solid #FFD666; }
+.priority-2, .priority.priority-2, .priority-indicator.priority-2, .priority-indicator.priority-alta { background-color: #FFF2E6; color: #FD7E14; border: 1px solid #FFAC6B; }
+.priority-3, .priority.priority-3, .priority-indicator.priority-3, .priority-indicator.priority-urgente { background-color: #FFF2F0; color: #FF4D4F; border: 1px solid #FFADD2; }
+
+/* Cores de Status */
+.status-pending { background-color: #F9F0FF; color: #722ED1; border: 1px solid #D3ADF7; }
+.status-optimized, .status-delivered { background-color: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
+.status-in_transit { background-color: #E6F7FF; color: #1890FF; border: 1px solid #91D5FF; }
+.status-cancelled { background-color: #FFF2F0; color: #FF4D4F; border: 1px solid #FFADD2; }
 
 @keyframes priorityPulse {
     0%, 100% { transform: scale(1); opacity: 1; }
@@ -739,14 +764,12 @@ h3 {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================== */
-/* 🔹 RESPONSIVIDADE */
+/* 🔹 RESPONSIVIDADE (UNIFICADA) */
 /* ============================== */
 @media (max-width: 768px) {
     .container { padding: 16px; }
     .route-header, .archive-header { flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 80px; }
     h1 { font-size: 20px; }
-    .delivery-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-    .delivery-priority-and-order { align-self: flex-end; align-items: flex-end; gap: 3px; }
     .map-controls, .action-buttons { flex-direction: column; width: 100%; gap: 8px; }
     .route-info { flex-direction: column; gap: 16px; text-align: center; }
     .route-stats { width: 100%; justify-content: space-around; gap: 20px; }
@@ -755,6 +778,22 @@ h3 {
     .form-row, .search-form { grid-template-columns: 1fr; }
     .archived-route-card, .route-card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
     .route-actions { align-self: flex-end; }
+    
+    .delivery-info {
+        padding-right: 0; /* No mobile, o texto pode usar todo o espaço */
+    }
+    .delivery-info h3 {
+        font-size: 15px;
+        margin: 0 0 3px 0;
+    }
+    .delivery-priority-and-order {
+        position: static; /* Volta ao fluxo normal em telas menores */
+        width: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -763,7 +802,24 @@ h3 {
     .form-group input, .form-group select, .form-group textarea { font-size: 13px; }
     .route-stat strong { font-size: 18px; }
     .home-container, .archive-container { padding: 80px 16px 16px 16px; }
-    .order-control { gap: 4px; padding: 2px; }
+
+    .order-control {
+        gap: 4px;
+        padding: 2px;
+    }
+    .order-number {
+        min-width: 26px;
+        padding: 2px 5px;
+        font-size: 11px;
+    }
+    .order-btn {
+        width: 20px;
+        height: 16px;
+        font-size: 8px;
+    }
+    .delivery-info h3 {
+        margin: 0 0 2px 0;
+    }
 }
 
 /* ============================== */
