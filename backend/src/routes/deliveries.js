@@ -562,7 +562,6 @@ async function checkColumnExists(tableName, columnName) {
     }
 }
 
-// Otimiza rota com ordem manual e paradas - VERSÃO ATUALIZADA
 // Otimiza rota com ordem manual e paradas - VERSÃO CORRIGIDA E ROBUSTA
 router.post('/optimize', async (req, res) => {
     try {
@@ -655,14 +654,27 @@ router.post('/optimize', async (req, res) => {
             console.log(`Nova rota criada (ID: ${routeId}).`);
         }
 
-        // Atualiza o status das entregas para 'optimized'
+        // Determina o status a ser aplicado
+        const isManualOrder = manualOrder && Object.keys(manualOrder).length > 0 && Object.values(manualOrder).some(v => v);
+        const newStatus = isManualOrder ? 'ordem_manual' : 'optimized';
+
+        console.log(`Aplicando novo status para as entregas: ${newStatus}`);
+
+        // Atualiza o status das entregas
         if (deliveriesResult.rows.length > 0) {
             const deliveryIds = deliveriesResult.rows.map(d => d.id);
             await db.query(
                 'UPDATE deliveries SET status = $1 WHERE id = ANY($2::int[])',
-                ['optimized', deliveryIds]
+                [newStatus, deliveryIds]
             );
         }
+
+        // Garante que o status também seja atualizado no objeto enviado de volta ao front-end
+        optimizedRoute.optimizedOrder.forEach(stop => {
+            if (stop.type !== 'pickup') {
+                stop.status = newStatus;
+            }
+        });
 
         console.log(`✅ Rota (ID: ${routeId}) otimizada com sucesso.`);
         

@@ -158,6 +158,7 @@ function getStatusLabel(status, itemType = 'delivery') {
     const labels = {
         'pending': 'Pendente',
         'optimized': 'Otimizada', 
+        'ordem_manual': 'Ordem Manual',
         'in_transit': 'Em Trânsito',
         'delivered': 'Entregue',
         'cancelled': 'Cancelada'
@@ -1100,6 +1101,7 @@ function updateManualOrderFromDOM() {
     
     setTimeout(() => {
         renderDeliveriesList();
+        resetDeliveriesToPending();
     }, 100);
 }
 
@@ -1145,6 +1147,9 @@ function moveDelivery(deliveryId, direction) {
     // Re-renderizar
     renderDeliveriesList();
     showToast(`Entrega movida para ${direction === 'up' ? 'cima' : 'baixo'}!`, 'success');
+    resetDeliveriesToPending();
+
+
 }
 
 function reorderAllDeliveries() {
@@ -1406,6 +1411,25 @@ function updateManualOrder(itemId, orderValue) {
         manualOrder[itemId] = order;
     }
     console.log("Ordem manual para", itemId, "atualizada para", manualOrder[itemId]);
+}
+
+function resetDeliveriesToPending() {
+    // Verifica se alguma entrega já não está como 'pendente'
+    const needsReset = deliveryData.some(d => d.status !== 'pending' && d.status !== 'delivered' && d.status !== 'cancelled');
+
+    if (!needsReset) return; // Se já estão pendentes, não faz nada
+
+    console.log('Ordem manual alterada. Resetando status para PENDENTE.');
+
+    deliveryData.forEach(delivery => {
+        // Não altera o status de entregas já concluídas ou canceladas
+        if (delivery.status !== 'delivered' && delivery.status !== 'cancelled') {
+            delivery.status = 'pending';
+        }
+    });
+
+    renderDeliveriesList();
+    showToast('Ordem alterada. Otimize a rota novamente.', 'info');
 }
 
 // --- Inicialização ---

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
     priority INTEGER DEFAULT 0,
     delivery_window_start TIME,
     delivery_window_end TIME,
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'optimized', 'in_transit', 'delivered', 'cancelled')),
+    status VARCHAR(20)  DEFAULT 'pending' CHECK (status IN ('pending', 'optimized', 'ordem_manual', 'in_transit', 'delivered', 'cancelled')),
     manual_order INTEGER DEFAULT NULL,
     external_order_id VARCHAR(50) NULL,
     external_order_data JSONB NULL,

@@ -608,6 +608,12 @@ h3 {
     margin-top: 8px; 
 }
 
+.status-ordem_manual {
+    background-color: #f0e6ff;
+    color: #531dab;
+    border: 1px solid #b37feb;
+}
+
 .priority-indicator {
     display: inline-block;
     padding: 2px 6px;
