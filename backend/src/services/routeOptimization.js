@@ -36,10 +36,11 @@ class RouteOptimizationService {
                 throw new Error('Nenhuma entrega para otimizar');
             }
 
-            console.log(`🚚 Otimizando rota para ${deliveries.length} paradas...`);
+            console.log("ROUTING_SERVICE: Objeto manualOrder recebido:", JSON.stringify(manualOrder, null, 2));
             
             // Se existe ordem manual, usa rota fixa
             const isAnyManualOrderSet = Object.keys(manualOrder).some(key => manualOrder[key]);
+            console.log("ROUTING_SERVICE: A condição 'isAnyManualOrderSet' é:", isAnyManualOrderSet);
             if (isAnyManualOrderSet) {
                 console.log('📌 Detectada ordenação manual. Usando ordem definida pelo usuário.');
                 const sortedDeliveries = [...deliveries].sort((a, b) => {
