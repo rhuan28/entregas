@@ -1612,18 +1612,20 @@ document.addEventListener('DOMContentLoaded', function() {
             autoOptimizeBtn.disabled = false;
             triggeredBy.innerHTML = originalText;
         }
-    }
+    }   
 
     // Listener do botão principal "Otimizar Rota"
     if (optimizeRouteBtn) {
         optimizeRouteBtn.addEventListener('click', function() {
-            runOptimization({ useManualOrder: isRouteAlreadyOptimized, triggeredBy: this });
+            // Ao clicar no botão principal, a intenção é sempre usar a ordem atual da tela.
+            runOptimization({ useManualOrder: true, triggeredBy: this });
         });
     }
 
     // Listener do botão de lâmpada "Otimização Automática"
     if (autoOptimizeBtn) {
         autoOptimizeBtn.addEventListener('click', function() {
+            // O botão de lâmpada força uma otimização automática do zero.
             runOptimization({ useManualOrder: false, triggeredBy: this });
         });
     }
