@@ -1008,3 +1008,238 @@ h3 {
     body { background: white !important; color: black !important; }
     .route-card, .delivery-item, .form-section { box-shadow: none !important; border: 1px solid #ddd !important; }
 }
+
+/* ===== CORREÇÃO DEFINITIVA DO ESPAÇAMENTO - PRIORIDADE ACIMA DOS BOTÕES ===== */
+
+/* 1. ELIMINAR COMPLETAMENTE O MARGIN DO H3 */
+.delivery-info h3 {
+    margin: 0 !important;
+    padding: 0 !important; /* ✅ ADICIONAR padding zero também */
+    font-size: 16px;
+    line-height: 1.1 !important; /* ✅ REDUZIR ainda mais o line-height */
+    word-wrap: break-word;
+    color: var(--text-dark);
+    font-weight: 600;
+    display: block; /* ✅ GARANTIR que é block */
+}
+
+/* 2. CORRIGIR O CONTAINER DELIVERY-INFO */
+.delivery-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0 !important; /* ✅ FORÇAR gap zero */
+    align-items: flex-start; /* ✅ ADICIONAR alinhamento */
+}
+
+/* 3. HEADER DA ENTREGA MAIS COMPACTO */
+.delivery-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4px !important; /* ✅ REDUZIR ainda mais */
+    gap: 12px; /* ✅ REDUZIR gap entre nome e controles */
+}
+
+/* 4. CONTAINER DE PRIORIDADE E ORDEM ULTRA COMPACTO */
+.delivery-priority-and-order {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px !important; /* ✅ REDUZIR para 2px */
+    flex-shrink: 0;
+    min-height: 0; /* ✅ ADICIONAR para não criar altura mínima */
+}
+
+/* 5. PRIORIDADE SEM NENHUM ESPAÇO EXTRA */
+.delivery-priority-and-order .priority {
+    margin: 0 !important;
+    padding: 2px 6px !important; /* ✅ MANTER padding mínimo */
+    align-self: flex-end;
+    line-height: 1 !important; /* ✅ LINE HEIGHT MÍNIMO */
+    font-size: 10px !important; /* ✅ REDUZIR fonte */
+}
+
+/* 6. CONTROLE DE ORDEM AINDA MAIS COMPACTO */
+.order-control {
+    display: flex;
+    align-items: center;
+    gap: 4px !important; /* ✅ REDUZIR gap */
+    background: rgba(229, 181, 179, 0.08);
+    border-radius: 6px;
+    padding: 2px !important; /* ✅ REDUZIR padding */
+    border: 1px solid rgba(229, 181, 179, 0.2);
+}
+
+/* 7. NÚMERO DA ORDEM COMPACTO */
+.order-number {
+    background: white;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    padding: 2px 5px !important; /* ✅ REDUZIR ainda mais */
+    font-weight: 700;
+    font-size: 11px !important; /* ✅ AUMENTAR um pouco a fonte */
+    color: var(--primary-color);
+    min-width: 26px !important; /* ✅ REDUZIR largura mínima */
+    text-align: center;
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    line-height: 1 !important; /* ✅ LINE HEIGHT MÍNIMO */
+}
+
+/* 8. BOTÕES DE ORDEM MENORES */
+.order-btn {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    width: 18px !important; /* ✅ REDUZIR ainda mais */
+    height: 14px !important; /* ✅ REDUZIR ainda mais */
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px !important; /* ✅ REDUZIR fonte */
+    font-weight: bold;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    line-height: 1 !important;
+}
+
+/* 9. GAP MÍNIMO ENTRE BOTÕES */
+.order-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0px !important; /* ✅ ELIMINAR gap completamente */
+}
+
+/* 10. PARÁGRAFOS MAIS PRÓXIMOS DO HEADER */
+.delivery-item p {
+    margin: 1px 0 !important; /* ✅ REDUZIR ainda mais */
+    font-size: 13px;
+    line-height: 1.2 !important;
+}
+
+/* 11. PRIMEIRO PARÁGRAFO COLADO NO HEADER */
+.delivery-header + p {
+    margin-top: 2px !important; /* ✅ REDUZIR de 4px para 2px */
+}
+
+/* 12. ITEM DE ENTREGA MAIS COMPACTO */
+.delivery-item {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: var(--border-radius);
+    padding: 8px !important; /* ✅ REDUZIR padding geral */
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    position: relative;
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* 13. PRIORITY INDICATOR INLINE MAIS COMPACTO */
+.priority-indicator {
+    display: inline-block;
+    padding: 1px 4px !important; /* ✅ REDUZIR padding */
+    border-radius: 12px;
+    font-size: 9px !important; /* ✅ REDUZIR fonte */
+    font-weight: 600;
+    margin-left: 4px !important; /* ✅ REDUZIR margin */
+    margin-top: 0;
+    margin-bottom: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+    line-height: 1 !important;
+}
+
+/* 14. CORREÇÃO PARA PRODUTOS INLINE NO NOME */
+.delivery-info h3 .priority-indicator {
+    vertical-align: baseline;
+    margin-left: 3px !important; /* ✅ REDUZIR para inline */
+    margin-top: -1px;
+}
+
+/* 15. RESPONSIVIDADE ULTRA COMPACTA */
+@media (max-width: 768px) {
+    .delivery-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px !important; /* ✅ REDUZIR para mobile */
+        margin-bottom: 2px !important; /* ✅ REDUZIR ainda mais */
+    }
+
+    .delivery-priority-and-order {
+        align-self: flex-end;
+        align-items: flex-end;
+        gap: 1px !important; /* ✅ GAP MÍNIMO */
+    }
+
+    .delivery-info h3 {
+        font-size: 15px;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .priority-indicator {
+        margin-left: 3px !important;
+        font-size: 8px !important;
+        padding: 1px 3px !important;
+    }
+
+    .order-number {
+        min-width: 24px !important;
+        padding: 1px 4px !important;
+        font-size: 10px !important;
+    }
+
+    .order-btn {
+        width: 16px !important;
+        height: 12px !important;
+        font-size: 7px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .delivery-item {
+        padding: 6px !important; /* ✅ AINDA MENOR */
+    }
+
+    .delivery-header {
+        gap: 3px !important;
+        margin-bottom: 1px !important;
+    }
+
+    .delivery-priority-and-order {
+        gap: 0px !important; /* ✅ SEM GAP */
+    }
+
+    .delivery-item p {
+        margin: 0px 0 !important; /* ✅ SEM MARGIN */
+    }
+
+    .delivery-header + p {
+        margin-top: 1px !important;
+    }
+}
+
+/* 16. GARANTIR QUE NÃO HÁ OVERFLOW OU ESPAÇOS EXTRAS */
+.delivery-priority-and-order * {
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* 17. FORÇAR COMPACTAÇÃO TOTAL */
+.delivery-info, .delivery-info * {
+    overflow: visible;
+    max-height: none;
+}
+
+/* 18. REMOVER QUALQUER ESPAÇO DE BOX-SIZING PROBLEMÁTICO */
+.delivery-header, .delivery-info, .delivery-priority-and-order {
+    box-sizing: border-box;
+    min-height: 0;
+    max-width: 100%;
+}
