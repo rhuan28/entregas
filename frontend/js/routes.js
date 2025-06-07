@@ -1526,6 +1526,8 @@ window.onload = async () => {
 };
 
 // --- Otimização de Rota ---
+// Substitua o seu bloco 'DOMContentLoaded' inteiro por este:
+
 document.addEventListener('DOMContentLoaded', function() {
     // Formulário de nova entrega
     const deliveryForm = document.getElementById('delivery-form');
@@ -1563,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Botões de otimização
+    // ----- INÍCIO DA LÓGICA CORRIGIDA DOS BOTÕES -----
     const optimizeRouteBtn = document.getElementById('optimize-route');
     const autoOptimizeBtn = document.getElementById('auto-optimize-route');
 
@@ -1576,6 +1578,8 @@ document.addEventListener('DOMContentLoaded', function() {
         triggeredBy.innerHTML = '<span class="loading"></span>';
 
         try {
+            // Se 'useManualOrder' for true, envia a ordem da tela. Senão, envia um objeto vazio.
+            // O back-end interpreta um objeto vazio como um pedido de otimização automática.
             const orderToSend = useManualOrder ? manualOrder : {};
 
             const requestData = {
@@ -1595,10 +1599,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
             
             if (response.ok && result.routeId) {
-                showToast(`Rota otimizada! Foram incluídas ${result.optimizedOrder.length} paradas.`, 'success');
+                // Após qualquer otimização bem-sucedida, marcamos que a rota já foi otimizada uma vez.
+                isRouteAlreadyOptimized = true;
+
+                showToast(`Rota processada com sucesso! ${result.optimizedOrder.length} paradas.`, 'success');
                 
-                // Recarrega todos os dados da rota do servidor.
-                // Esta função já atualiza a lista de entregas, o mapa e as estatísticas com os novos dados.
+                // Recarrega todos os dados para garantir que a tela esteja 100% sincronizada com o back-end.
                 await loadDeliveries();
 
             } else {
@@ -1612,23 +1618,30 @@ document.addEventListener('DOMContentLoaded', function() {
             autoOptimizeBtn.disabled = false;
             triggeredBy.innerHTML = originalText;
         }
-    }   
+    }
 
     // Listener do botão principal "Otimizar Rota"
     if (optimizeRouteBtn) {
         optimizeRouteBtn.addEventListener('click', function() {
-            // Ao clicar no botão principal, a intenção é sempre usar a ordem atual da tela.
-            runOptimization({ useManualOrder: true, triggeredBy: this });
+            // Se a rota já foi otimizada antes, o botão principal agora SEMPRE respeitará a ordem manual da tela.
+            // Se nunca foi otimizada, `isRouteAlreadyOptimized` será `false`, acionando a otimização automática inicial.
+            const shouldUseManualOrder = isRouteAlreadyOptimized;
+            
+            runOptimization({ useManualOrder: shouldUseManualOrder, triggeredBy: this });
         });
     }
 
     // Listener do botão de lâmpada "Otimização Automática"
     if (autoOptimizeBtn) {
         autoOptimizeBtn.addEventListener('click', function() {
-            // O botão de lâmpada força uma otimização automática do zero.
-            runOptimization({ useManualOrder: false, triggeredBy: this });
+            // O botão de lâmpada SEMPRE força uma nova otimização automática do zero.
+            // Adicionado um confirm para segurança, pois descarta a ordem manual.
+            if (confirm("Isso irá descartar qualquer ordenação manual e criar uma nova rota otimizada. Deseja continuar?")) {
+                runOptimization({ useManualOrder: false, triggeredBy: this });
+            }
         });
     }
+    // ----- FIM DA LÓGICA CORRIGIDA -----
 });
 
 // Funções globais

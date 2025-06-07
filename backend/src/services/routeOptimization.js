@@ -141,7 +141,6 @@ class RouteOptimizationService {
                 // Remove paradas processadas
                 const processedIds = new Set([...detoursOnWay.map(d => d.id), nextStop.id]);
                 remaining = remaining.filter(d => !processedIds.has(d.id));
-                allRemainingStops = allRemainingStops.filter(d => !processedIds.has(d.id));
             } else {
                 result.push(nextStop);
                 remaining = remaining.filter(d => d.id !== nextStop.id);
